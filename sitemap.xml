@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Main pages -->
+  <url>
+    <loc>https://salesforcegyan.com/index.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/about.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/blog.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/apex.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/lwc.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/interview.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/trailhead.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/tools.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Interview posts -->
+  <url>
+    <loc>https://salesforcegyan.com/posts/interview/apex-questions.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/posts/interview/lwc-questions.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/posts/interview/sharing-questions.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Trailhead posts -->
+  <url>
+    <loc>https://salesforcegyan.com/posts/trailhead/opportunity-errors.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+</urlset>

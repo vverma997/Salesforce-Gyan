@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>An unexpected error occurred while inserting Opportunity records - Trailhead Fix</title>
+  <meta name="description" content="Fix the Trailhead error: 'An unexpected error occurred while inserting Opportunity records'. Learn how to resolve picklist restrictions and field dependencies that cause this Trailhead challenge failure.">
+  <meta name="keywords" content="trailhead error, opportunity records, unexpected error, trailhead challenge, salesforce trailhead, picklist restriction, field dependency, trailhead fix">
+  <meta name="author" content="SalesforceG">
+  <meta name="robots" content="index, follow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Fix: An unexpected error occurred while inserting Opportunity records - Trailhead">
+  <meta property="og:description" content="Complete guide to fix the common Trailhead error when inserting Opportunity records. Step-by-step solution for picklist and field dependency issues.">
+  <meta property="og:url" content="https://salesforcegyan.com/posts/trailhead/opportunity-errors.html">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Fix Trailhead Opportunity Records Error">
+  <meta name="twitter:description" content="Step-by-step guide to resolve the 'unexpected error occurred while inserting Opportunity records' in Trailhead challenges.">
+
+  <link rel="canonical" href="https://salesforcegyan.com/posts/trailhead/opportunity-errors.html">
+
+  <!-- Structured Data for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Fix: An unexpected error occurred while inserting Opportunity records - Trailhead",
+    "description": "Complete guide to fix the Trailhead error: 'An unexpected error occurred while inserting Opportunity records and we couldn't check your work.'",
+    "author": {
+      "@type": "Person",
+      "name": "SalesforceG"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "SalesforceG",
+      "url": "https://salesforcegyan.com"
+    },
+    "datePublished": "2024-04-20",
+    "dateModified": "2024-04-20",
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": "https://salesforcegyan.com/posts/trailhead/opportunity-errors.html"
+    },
+    "keywords": ["trailhead", "salesforce", "error fix", "opportunity records", "challenge"],
+    "articleSection": "Trailhead Guides"
+  }
+  </script>
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../trailhead.html">Trailhead</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trailhead Opportunity Error — How to Fix It</h1>
+
+  <p>
+    A common Trailhead issue many people face is this error:
+    <b>“An unexpected error occurred while inserting Opportunity records and we couldn't check your work. Make sure Opportunity records can be inserted in this org, and click "Check Challenge" again. ”</b>
+  </p>
+
+  <p>
+    In most cases, this happens because of incorrect <b>picklist restrictions</b> or
+    <b>field dependency settings</b> on the Opportunity object.
+  </p>
+
+  <h2>Why this happens</h2>
+
+  <p>
+    Trailhead tries to insert Opportunity records in your org while checking the challenge.
+    If your Opportunity fields are restricted in a way that blocks those values, the challenge fails.
+  </p>
+
+  <h2>Fix 1 — Remove Picklist Restriction</h2>
+
+  <p>
+    First, make sure the <b>Close Reason</b> field is not restricted.
+  </p>
+
+  <ul>
+    <li>Go to <b>Setup</b></li>
+    <li>Open <b>Object Manager</b></li>
+    <li>Select <b>Opportunity</b></li>
+    <li>Go to <b>Fields &amp; Relationships</b></li>
+    <li>Open <b>Close Reason</b></li>
+    <li>Click <b>Edit</b></li>
+    <li>Under <b>Picklist (Multi-Select) Options</b>, uncheck:
+      <br><b>Restrict picklist to the values defined in the value set</b>
+    </li>
+    <li>Save</li>
+  </ul>
+  
+  <img src="../../assets/images/error.png" alt="Close Reason Fix" class="post-image">
+  
+  <p class="image-caption">Uncheck the restriction as shown above</p>
+
+  <h2>Fix 2 — Check Field Dependencies</h2>
+
+  <p>
+    Next, verify that the dependency settings include all needed values.
+  </p>
+
+  <ul>
+    <li>Go to <b>Setup</b></li>
+    <li>Open <b>Object Manager</b></li>
+    <li>Select <b>Opportunity</b></li>
+    <li>Open <b>Field Dependencies</b></li>
+    <li>Edit the related field dependency</li>
+    <li>Make sure all <b>Closed Won</b> and <b>Closed Lost</b> values are included</li>
+    <li>Save</li>
+  </ul>
+
+  <h2>Final Step</h2>
+
+  <p>
+    After making these two changes, go back to Trailhead and click <b>Check Challenge</b> again.
+  </p>
+
+  <p>
+    In most cases, this resolves the issue and the challenge passes successfully.
+  </p>
+  
+  <h2>Reference</h2>
+
+<p>
+  You can also check the original discussion here:
+</p>
+
+<p>
+  <a href="https://trailhead.salesforce.com/trailblazer-community/feed/0D5KX00000anhTX0AY" target="_blank">
+    Trailhead Community Discussion
+  </a>
+</p>
+
+  <a href="../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

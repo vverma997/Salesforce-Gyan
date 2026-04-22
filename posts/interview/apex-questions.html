@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Apex Interview Questions</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../interview.html">Interview</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Apex Interview Questions – Scenario-Based & Technical</h1>
+
+  <p>
+    This guide covers commonly asked Apex interview questions with practical, real-world scenarios. Prepare with both technical fundamentals and hands-on problem solving.
+  </p>
+
+  <h2>1. Scenario: Handling Bulk Operations in Triggers</h2>
+
+  <p>
+    <strong>Question:</strong> You have a trigger on the Account object that updates related Opportunities whenever an Account is updated. The trigger is working fine in your sandbox but fails in production when bulk operations happen. What could be the issue, and how would you fix it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> The trigger is likely hitting governor limits (SOQL query limit of 100 or DML limit of 150). The fix involves bulkification:
+  </p>
+
+  <pre><code>
+trigger AccountTrigger on Account (after update) {
+    // ❌ BAD: Hits governor limits on bulk operations
+    // for (Account acc : Trigger.new) {
+    //     List<Opportunity> oppsToUpdate = [
+    //         SELECT Id FROM Opportunity WHERE AccountId = :acc.Id
+    //     ];
+    // }
+
+    // ✅ GOOD: Bulkified approach
+    Set<Id> accountIds = new Set<Id>();
+    for (Account acc : Trigger.new) {
+        accountIds.add(acc.Id);
+    }
+
+    List<Opportunity> oppsToUpdate = [
+        SELECT Id, AccountId FROM Opportunity WHERE AccountId IN :accountIds
+    ];
+
+    for (Opportunity opp : oppsToUpdate) {
+        opp.StageName = 'Prospecting';
+    }
+    update oppsToUpdate;
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Always query once for all records, not once per record</li>
+    <li>Use <code>IN</code> with a Set/List to fetch multiple records at once</li>
+    <li>Separate business logic from DML operations when possible</li>
+  </ul>
+
+  <h2>2. Scenario: Preventing Trigger Recursion</h2>
+
+  <p>
+    <strong>Question:</strong> You have an Apex trigger that inserts related records. When that related record is created, another trigger fires and updates the original record, which fires the first trigger again. How do you prevent this infinite loop?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use a static flag to track whether a trigger has already executed:
+  </p>
+
+  <pre><code>
+public class TriggerHandler {
+    private static Boolean isExecuting = false;
+
+    public static void handleAccountInsert(List<Account> newAccounts) {
+        if (isExecuting) {
+            return;  // Prevent recursion
+        }
+
+        isExecuting = true;
+
+        try {
+            for (Account acc : newAccounts) {
+                // Process account
+                acc.Description = 'Processed at ' + DateTime.now();
+            }
+        } finally {
+            isExecuting = false;  // Always reset in finally
+        }
+    }
+}
+
+// Trigger
+trigger AccountTrigger on Account (after insert) {
+    TriggerHandler.handleAccountInsert(Trigger.new);
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use a static variable to track execution state</li>
+    <li>Reset the flag in a <code>finally</code> block to ensure it always resets</li>
+    <li>Consider a more robust handler pattern for complex scenarios</li>
+  </ul>
+
+  <h2>3. Scenario: Handling API Callouts with Error Management</h2>
+
+  <p>
+    <strong>Question:</strong> Your Apex code needs to call an external API to validate customer information. The API can fail or timeout. How do you handle this safely with proper error reporting?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use try/catch with proper timeout handling and logging:
+  </p>
+
+  <pre><code>
+public class CustomerValidator {
+    public static Boolean validateCustomer(String customerId) {
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://api.example.com/validate?id=' + customerId);
+        req.setMethod('GET');
+        req.setTimeout(5000);  // 5 second timeout
+
+        try {
+            Http http = new Http();
+            HttpResponse res = http.send(req);
+
+            if (res.getStatusCode() == 200) {
+                Map<String, Object> response = (Map<String, Object>)
+                    JSON.deserializeUntyped(res.getBody());
+                return (Boolean) response.get('isValid');
+            } else {
+                System.debug('API Error: ' + res.getStatusCode());
+                logError('ValidateCustomer', 'Invalid response code: ' + res.getStatusCode());
+                return false;
+            }
+        } catch (System.CalloutException e) {
+            System.debug('Callout timeout or connection error');
+            logError('ValidateCustomer', 'Callout failed: ' + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            System.debug('Unexpected error: ' + e.getMessage());
+            logError('ValidateCustomer', 'Unexpected error: ' + e.getMessage());
+            return false;
+        }
+    }
+
+    private static void logError(String method, String errorMsg) {
+        // Log to a custom object or system logs
+        System.debug(LoggingLevel.ERROR, method + ': ' + errorMsg);
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Always set a timeout to prevent hanging callouts</li>
+    <li>Handle <code>CalloutException</code> separately for network/timeout issues</li>
+    <li>Log errors for debugging and monitoring</li>
+    <li>Provide sensible defaults when APIs fail</li>
+  </ul>
+
+  <h2>4. Scenario: Testing with Proper Test Data Setup</h2>
+
+  <p>
+    <strong>Question:</strong> You need to write a test class that achieves 100% code coverage for your AccountTrigger. What's the best approach for test data setup?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use the <code>@testSetup</code> method to create reusable test data:
+  </p>
+
+  <pre><code>
+@isTest
+private class AccountTriggerTest {
+
+    @testSetup
+    static void setupTestData() {
+        // Create test accounts once, reuse in all test methods
+        List<Account> accounts = new List<Account>();
+        for (Integer i = 0; i < 50; i++) {
+            accounts.add(new Account(
+                Name = 'Test Account ' + i,
+                Industry = 'Technology'
+            ));
+        }
+        insert accounts;
+    }
+
+    @isTest
+    static void testBulkAccountUpdate() {
+        List<Account> accounts = [SELECT Id FROM Account];
+
+        Test.startTest();
+        for (Account acc : accounts) {
+            acc.Phone = '555-0100';
+        }
+        update accounts;
+        Test.stopTest();
+
+        // Verify results
+        List<Account> updatedAccounts = [
+            SELECT Id, Phone FROM Account WHERE Phone = '555-0100'
+        ];
+        Assert.areEqual(50, updatedAccounts.size(), 
+            'Expected 50 accounts to be updated');
+    }
+
+    @isTest
+    static void testAccountInsertWithValidation() {
+        Test.startTest();
+        Account newAcc = new Account(
+            Name = 'New Test Account',
+            Industry = 'Finance'
+        );
+        insert newAcc;
+        Test.stopTest();
+
+        Account insertedAcc = [
+            SELECT Id, Name FROM Account WHERE Id = :newAcc.Id
+        ];
+        Assert.isNotNull(insertedAcc, 'Account should be inserted');
+    }
+
+    @isTest
+    static void testAccountDelete() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        delete acc;
+        Test.stopTest();
+
+        List<Account> deletedAccounts = [
+            SELECT Id FROM Account WHERE Id = :acc.Id
+        ];
+        Assert.areEqual(0, deletedAccounts.size(), 
+            'Account should be deleted');
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>@testSetup</code> to create shared test data</li>
+    <li>Use <code>Test.startTest()</code> and <code>Test.stopTest()</code> to reset governor limits</li>
+    <li>Test positive cases (success paths) and negative cases (errors)</li>
+    <li>Use meaningful Assert messages for debugging failures</li>
+  </ul>
+
+  <h2>5. Scenario: Asynchronous Processing with Queueable</h2>
+
+  <p>
+    <strong>Question:</strong> Your synchronous Apex code is hitting CPU timeout limits when processing 10,000 records. You need to process them asynchronously. Would you use @future, Queueable, or Batch Apex? Why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> For this scenario, use <code>Queueable</code>:
+  </p>
+
+  <ul>
+    <li><code>@future</code> – Simple, but limited to primitives (no objects), hard to handle failures</li>
+    <li><code>Queueable</code> – Can pass objects, chainable, good for moderate jobs (10K+ records)</li>
+    <li><code>Batch Apex</code> – Best for very large jobs (millions), scheduled processing, auto-retry</li>
+  </ul>
+
+  <pre><code>
+public class AccountProcessorQueueable implements Queueable {
+    private List<Account> accounts;
+
+    public AccountProcessorQueueable(List<Account> accounts) {
+        this.accounts = accounts;
+    }
+
+    public void execute(QueueableContext ctx) {
+        try {
+            for (Account acc : accounts) {
+                acc.Type = 'Prospect';
+            }
+            update accounts;
+        } catch (Exception e) {
+            System.debug('Error in Queueable: ' + e.getMessage());
+        }
+    }
+}
+
+// Usage
+List<Account> accountsToProcess = [SELECT Id FROM Account LIMIT 10000];
+System.enqueueJob(new AccountProcessorQueueable(accountsToProcess));
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Queueable is chainable – can spawn another job if needed</li>
+    <li>Handles complex objects unlike @future</li>
+    <li>For really large jobs, use Batch with scheduled start</li>
+  </ul>
+
+  <h2>6. Scenario: SOQL Query Optimization</h2>
+
+  <p>
+    <strong>Question:</strong> Your dashboard query that fetches accounts and their opportunities is running slowly. How would you optimize it to reduce query time?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use relationships and selective queries:
+  </p>
+
+  <pre><code>
+// ❌ INEFFICIENT: Multiple queries (N+1 problem)
+// List<Account> accounts = [SELECT Id, Name FROM Account];
+// for (Account acc : accounts) {
+//     List<Opportunity> opps = [SELECT Id FROM Opportunity WHERE AccountId = :acc.Id];
+// }
+
+// ✅ EFFICIENT: Single query with relationship
+List<Account> accounts = [
+    SELECT Id, Name, 
+           (SELECT Id, StageName, Amount FROM Opportunities LIMIT 100)
+    FROM Account
+    WHERE Industry = 'Technology'
+    LIMIT 500
+];
+
+// Even better: Use parent-to-child relationship
+List<Opportunity> opps = [
+    SELECT Id, Amount, Account.Name
+    FROM Opportunity
+    WHERE Account.Industry = 'Technology'
+    AND StageName IN ('Prospecting', 'Qualification')
+    ORDER BY Amount DESC
+    LIMIT 1000
+];
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use relationship queries to fetch related data in one query</li>
+    <li>Filter with <code>WHERE</code> clauses to reduce result set</li>
+    <li>Use <code>LIMIT</code> to control memory usage</li>
+    <li>Avoid N+1 queries (query in a loop)</li>
+  </ul>
+
+  <h2>7. Scenario: Avoiding SOQL Injection</h2>
+
+  <p>
+    <strong>Question:</strong> Your Apex code builds a SOQL query based on user input. A security review flagged potential SOQL injection. How do you fix this?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Never concatenate user input directly into SOQL. Use bind variables:
+  </p>
+
+  <pre><code>
+// ❌ VULNERABLE: SOQL Injection risk
+// String userInput = getUserInput();
+// List<Account> accounts = Database.query(
+//     'SELECT Id FROM Account WHERE Name = \'' + userInput + '\''
+// );
+
+// ✅ SAFE: Use bind variables
+public static List<Account> searchAccounts(String searchTerm) {
+    String safeSearch = '%' + searchTerm + '%';
+    return [
+        SELECT Id, Name FROM Account
+        WHERE Name LIKE :safeSearch
+        LIMIT 100
+    ];
+}
+
+// ✅ SAFE: Dynamic SOQL with binding
+public static List<SObject> dynamicQuery(String objectName, String whereClause) {
+    String query = 'SELECT Id FROM ' + objectName;  // Object name from admin
+    if (String.isNotBlank(whereClause)) {
+        query += ' WHERE ' + whereClause;
+    }
+    return Database.query(query);  // Use Database.query, not direct String concatenation
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use bind variables (:<code>variable</code>) for all user input</li>
+    <li>Use <code>String.escapeSingleQuotes()</code> as a last resort</li>
+    <li>Use <code>Database.query()</code> with parameterized inputs carefully</li>
+    <li>Never trust user input in SOQL queries</li>
+  </ul>
+
+  <h2>8. Scenario: Governor Limits – CPU Time</h2>
+
+  <p>
+    <strong>Question:</strong> Your batch job processes 100 records but consistently hits CPU timeout (>10s). What can you do to optimize?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Optimize logic and use async processing:
+  </p>
+
+  <ul>
+    <li><strong>Reduce loops</strong> – Use Maps/Sets instead of nested loops</li>
+    <li><strong>Cache data</strong> – Query once, reuse results</li>
+    <li><strong>Simplify calculations</strong> – Move complex logic out of loops</li>
+    <li><strong>Use smaller batch sizes</strong> – Process fewer records per batch execution</li>
+  </ul>
+
+  <pre><code>
+// ❌ SLOW: Nested loops
+List<Account> accounts = [SELECT Id FROM Account];
+List<Contact> contacts = [SELECT Id, AccountId FROM Contact];
+
+for (Account acc : accounts) {  // 100 iterations
+    for (Contact con : contacts) {  // 1000 iterations = 100K operations!
+        if (con.AccountId == acc.Id) {
+            // Process
+        }
+    }
+}
+
+// ✅ FAST: Use a Map
+Map<Id, List<Contact>> accountContactMap = new Map<Id, List<Contact>>();
+for (Contact con : contacts) {
+    if (!accountContactMap.containsKey(con.AccountId)) {
+        accountContactMap.put(con.AccountId, new List<Contact>());
+    }
+    accountContactMap.get(con.AccountId).add(con);
+}
+
+for (Account acc : accounts) {
+    List<Contact> conList = accountContactMap.get(acc.Id);
+    if (conList != null) {
+        // Process contacts for this account
+    }
+}
+  </code></pre>
+
+  <h2>Summary</h2>
+
+  <p>
+    When preparing for Apex interviews, focus on:
+  </p>
+
+  <ul>
+    <li><strong>Bulkification</strong> – Handle bulk operations gracefully</li>
+    <li><strong>Governor Limits</strong> – Know the limits and how to optimize around them</li>
+    <li><strong>Recursion Control</strong> – Prevent infinite loops</li>
+    <li><strong>Error Handling</strong> – Use try/catch and log appropriately</li>
+    <li><strong>Testing</strong> – Write comprehensive tests with proper setup</li>
+    <li><strong>Security</strong> – Prevent injection attacks and enforce sharing rules</li>
+    <li><strong>Performance</strong> – Optimize queries and use async processing when needed</li>
+    <li><strong>Callouts</strong> – Handle API errors and timeouts gracefully</li>
+    <li><strong>Data Locking</strong> – Design to avoid row locks and deadlocks</li>
+    <li><strong>Platform Events</strong> – Use for real-time, decoupled integrations</li>
+  </ul>
+
+  <h2>Advanced Scenarios</h2>
+
+  <h2>9. Scenario: API Callouts in Triggers – The Right Way</h2>
+
+  <p>
+    <strong>Question:</strong> You need to call an external API when an Opportunity is created, but triggers don't allow callouts directly. What approach will you use?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>Platform Events</code> or <code>@future</code> to decouple the trigger from the callout:
+  </p>
+
+  <pre><code>
+// Approach 1: Use @future for simple callouts
+trigger OpportunityTrigger on Opportunity (after insert) {
+    Set<Id> oppIds = new Set<Id>();
+    for (Opportunity opp : Trigger.new) {
+        oppIds.add(opp.Id);
+    }
+    notifyExternalSystem(oppIds);
+}
+
+@future(callout=true)
+public static void notifyExternalSystem(Set<Id> oppIds) {
+    List<Opportunity> opps = [SELECT Id, Name FROM Opportunity WHERE Id IN :oppIds];
+    
+    for (Opportunity opp : opps) {
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://api.example.com/opportunity');
+        req.setMethod('POST');
+        req.setBody(JSON.serialize(new Map<String, String>{
+            'id' => opp.Id,
+            'name' => opp.Name
+        }));
+        
+        try {
+            Http http = new Http();
+            HttpResponse res = http.send(req);
+        } catch (Exception e) {
+            System.debug('Callout failed: ' + e.getMessage());
+        }
+    }
+}
+  </code></pre>
+
+  <pre><code>
+// Approach 2: Use Platform Events (more scalable)
+trigger OpportunityTrigger on Opportunity (after insert) {
+    List<Opportunity_Created__e> events = new List<Opportunity_Created__e>();
+    
+    for (Opportunity opp : Trigger.new) {
+        events.add(new Opportunity_Created__e(
+            Opportunity_Id__c = opp.Id,
+            Opportunity_Name__c = opp.Name
+        ));
+    }
+    
+    EventBus.publish(events);
+}
+
+// Subscriber (separate Apex class)
+public class OpportunityEventHandler {
+    @AuraEnabled
+    public static void handleOpportunityCreatedEvent(List<SObject> events) {
+        for (SObject event : events) {
+            Opportunity_Created__e oppEvent = (Opportunity_Created__e) event;
+            callExternalAPI(oppEvent.Opportunity_Id__c, oppEvent.Opportunity_Name__c);
+        }
+    }
+    
+    private static void callExternalAPI(String oppId, String oppName) {
+        // Make HTTP callout here
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>@future(callout=true)</code> – Best for simple, fire-and-forget callouts</li>
+    <li><code>Platform Events</code> – Better for complex, scalable event processing</li>
+    <li>Never make HTTP callouts directly in triggers</li>
+    <li>Platform Events decouple publishers from subscribers</li>
+  </ul>
+
+  <h2>10. Scenario: Batch Job Failures with Partial Recovery</h2>
+
+  <p>
+    <strong>Question:</strong> A batch job is failing midway due to large data volume. How would you handle partial failures and retries?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Batch Apex with Database.update() to allow partial success:
+  </p>
+
+  <pre><code>
+public class AccountBatchProcessor implements Database.Batchable<sObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Name FROM Account WHERE Industry = 'Technology'
+        ]);
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> accounts) {
+        List<Database.SaveResult> results = Database.update(accounts, false);
+        
+        // Log failures for later retry
+        List<String> failedIds = new List<String>();
+        for (Integer i = 0; i < results.size(); i++) {
+            if (!results[i].isSuccess()) {
+                failedIds.add(accounts[i].Id);
+                for (Database.Error err : results[i].getErrors()) {
+                    System.debug('Error on ' + accounts[i].Id + ': ' + err.getMessage());
+                }
+            }
+        }
+        
+        // Log failed records to custom object for retry
+        if (!failedIds.isEmpty()) {
+            insertErrorLog(failedIds, 'Update failed');
+        }
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        AsyncApexJob job = [
+            SELECT Id, Status, NumberOfErrors FROM AsyncApexJob WHERE Id = :bc.getJobId()
+        ];
+        System.debug('Batch finished. Errors: ' + job.NumberOfErrors);
+        
+        // Send email notification with results
+        sendNotification(job);
+    }
+    
+    private void insertErrorLog(List<String> ids, String reason) {
+        List<Error_Log__c> logs = new List<Error_Log__c>();
+        for (String id : ids) {
+            logs.add(new Error_Log__c(
+                Record_Id__c = id,
+                Reason__c = reason,
+                Retry_Count__c = 0
+            ));
+        }
+        insert logs;
+    }
+    
+    private void sendNotification(AsyncApexJob job) {
+        // Send email with batch results
+    }
+}
+
+// Usage
+Database.executeBatch(new AccountBatchProcessor(), 200);
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>Database.update(list, false)</code> to allow partial success</li>
+    <li>Log failures to a custom object for manual or automatic retry</li>
+    <li>Use batch size of 200 (optimal for most scenarios)</li>
+    <li>Send notifications after batch completes</li>
+  </ul>
+
+  <h2>11. Scenario: Optimizing Slow SOQL Queries</h2>
+
+  <p>
+    <strong>Question:</strong> Users complain that a page is slow due to multiple SOQL queries. How do you optimize the queries?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use query optimization techniques:
+  </p>
+
+  <pre><code>
+// ❌ SLOW: 1 + N queries
+List<Account> accounts = [SELECT Id, Name FROM Account LIMIT 500];
+for (Account acc : accounts) {
+    List<Contact> contacts = [SELECT Id FROM Contact WHERE AccountId = :acc.Id];
+    acc.ContactCount = contacts.size();
+}
+
+// ✅ FAST: Single aggregation query
+List<AggregateResult> results = [
+    SELECT AccountId, COUNT(Id) contactCount 
+    FROM Contact 
+    GROUP BY AccountId
+];
+
+Map<Id, Integer> accountContactCount = new Map<Id, Integer>();
+for (AggregateResult ar : results) {
+    accountContactCount.put((Id)ar.get('AccountId'), (Integer)ar.get('contactCount'));
+}
+
+List<Account> accounts = [SELECT Id, Name FROM Account LIMIT 500];
+for (Account acc : accounts) {
+    acc.ContactCount__c = accountContactCount.get(acc.Id) ?? 0;
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use aggregate queries (COUNT, SUM, MAX) for analytics</li>
+    <li>Use relationship queries to fetch related data in one call</li>
+    <li>Index frequently queried fields for faster lookups</li>
+    <li>Use selective SOQL with indexed fields in WHERE clauses</li>
+  </ul>
+
+  <h2>12. Scenario: Batch vs Queueable for Large Datasets</h2>
+
+  <p>
+    <strong>Question:</strong> You need to process 1 million records. Would you use Batch Apex or Queueable, and why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>Batch Apex</code> for 1 million records:
+  </p>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <th style="border: 1px solid #ccc; padding: 8px;">Criteria</th>
+      <th style="border: 1px solid #ccc; padding: 8px;">Batch Apex</th>
+      <th style="border: 1px solid #ccc; padding: 8px;">Queueable</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Scale</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Millions of records</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">10K–100K records</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Chainable</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">No (manual chaining)</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Yes (enqueue from execute)</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Scheduling</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Scheduled with Schedulable</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Immediate or from trigger</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Fault Tolerance</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Auto-retry per batch</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Manual error handling</td>
+    </tr>
+  </table>
+
+  <pre><code>
+// For 1 million records, use Batch
+global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, Database.Stateful {
+    global Integer recordsProcessed = 0;
+
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([SELECT Id FROM Account]);
+    }
+
+    global void execute(Database.BatchableContext bc, List<Account> records) {
+        for (Account acc : records) {
+            acc.LastProcessedDate__c = DateTime.now();
+            recordsProcessed++;
+        }
+        update records;
+    }
+
+    global void finish(Database.BatchableContext bc) {
+        System.debug('Processed ' + recordsProcessed + ' records');
+    }
+}
+
+// Execute with batch size of 2000 (max allowed)
+Database.executeBatch(new ProcessMillionRecordsBatch(), 2000);
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Batch Apex: Best for massive datasets (1M+ records)</li>
+    <li>Use <code>Database.Stateful</code> to track state across batches</li>
+    <li>Use batch size of 2000 for large jobs (higher batch size = fewer executions)</li>
+    <li>Implement <code>Database.Batchable</code> for better error handling</li>
+  </ul>
+
+  <h2>13. Scenario: Preventing Trigger Recursion with Tracking</h2>
+
+  <p>
+    <strong>Question:</strong> A trigger is causing recursion and updating the same records again. How do you prevent it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use a recursive check class with context tracking:
+  </p>
+
+  <pre><code>
+public class RecursionControl {
+    private static Set<String> executedTriggers = new Set<String>();
+
+    public static Boolean isFirstExecution(String triggerName) {
+        if (executedTriggers.contains(triggerName)) {
+            return false;
+        }
+        executedTriggers.add(triggerName);
+        return true;
+    }
+
+    public static void reset() {
+        executedTriggers.clear();
+    }
+}
+
+// Trigger
+trigger AccountTrigger on Account (after update) {
+    if (!RecursionControl.isFirstExecution('AccountTrigger')) {
+        return;
+    }
+
+    // Your logic here
+    List<Account> accountsToUpdate = new List<Account>();
+    for (Account acc : Trigger.new) {
+        if (acc.BillingCountry != Trigger.oldMap.get(acc.Id).BillingCountry) {
+            acc.LastLocationChange__c = DateTime.now();
+            accountsToUpdate.add(acc);
+        }
+    }
+
+    if (!accountsToUpdate.isEmpty()) {
+        update accountsToUpdate;  // This won't trigger recursion
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use a static Set to track trigger executions</li>
+    <li>Return early if trigger has already executed</li>
+    <li>Consider using separate handler classes for cleaner code</li>
+  </ul>
+
+  <h2>14. Scenario: Field-Level Security (FLS) and CRUD Checks</h2>
+
+  <p>
+    <strong>Question:</strong> You need to ensure only users with proper access can update certain fields via Apex. How do you enforce FLS and CRUD?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>with sharing</code> keyword and check permissions:
+  </p>
+
+  <pre><code>
+// Enforce sharing rules
+public with sharing class AccountService {
+    public static void updateAccountFields(Id accountId, String newName) {
+        // Check CRUD: Can the user read and update Accounts?
+        if (!Account.SObjectType.getDescribe().isUpdateable()) {
+            throw new SecurityException('User cannot update Accounts');
+        }
+
+        // Check FLS: Can the user update the Name field?
+        if (!Schema.sObjectType.Account.fields.Name.isUpdateable()) {
+            throw new SecurityException('User cannot update Account Name field');
+        }
+
+        Account acc = new Account(Id = accountId, Name = newName);
+        update acc;
+    }
+
+    public static List<Account> getAccounts() {
+        // Check if user can read Accounts
+        if (!Account.SObjectType.getDescribe().isAccessible()) {
+            throw new SecurityException('User cannot read Accounts');
+        }
+
+        // Only return Name field if user has FLS access
+        if (!Schema.sObjectType.Account.fields.Name.isAccessible()) {
+            return [SELECT Id FROM Account];
+        }
+
+        return [SELECT Id, Name FROM Account];
+    }
+}
+
+public class SecurityException extends Exception {}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>with sharing</code> keyword to enforce org-wide defaults</li>
+    <li>Check <code>isAccessible()</code>, <code>isUpdateable()</code>, <code>isCreateable()</code></li>
+    <li>Check field-level security with <code>field.isAccessible()</code></li>
+    <li>Throw exceptions when user lacks permissions</li>
+  </ul>
+
+  <h2>15. Scenario: Handling Row Locks (UNABLE_TO_LOCK_ROW)</h2>
+
+  <p>
+    <strong>Question:</strong> You get UNABLE_TO_LOCK_ROW errors during data loads. How would you design to avoid it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Batch updates and reduce transaction overlap:
+  </p>
+
+  <pre><code>
+// ❌ BAD: Updates same record in multiple places
+update account1;
+doSomeLogic();
+update account1;  // UNABLE_TO_LOCK_ROW!
+
+// ✅ GOOD: Collect updates and do once
+List<Account> accountsToUpdate = new List<Account>();
+
+accountsToUpdate.add(account1);
+// ... do logic ...
+accountsToUpdate.add(account2);
+
+// Single update at the end
+update accountsToUpdate;
+
+// ✅ BETTER: Use batch processing for large operations
+public class BatchAccountUpdater implements Database.Batchable<sObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Name FROM Account 
+            WHERE Type = 'Prospect'
+            ORDER BY Id  // Important: consistent ordering
+        ]);
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> accounts) {
+        // Small batches reduce lock contention
+        for (Account acc : accounts) {
+            acc.Type = 'Customer';
+        }
+        update accounts;
+    }
+
+    public void finish(Database.BatchableContext bc) {}
+}
+
+// Execute with smaller batch size to reduce lock time
+Database.executeBatch(new BatchAccountUpdater(), 50);
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Process updates in smaller batches to reduce lock time</li>
+    <li>Avoid updating the same record multiple times in one transaction</li>
+    <li>Query with ORDER BY for consistent batching</li>
+    <li>Reduce the number of concurrent processes writing to same objects</li>
+  </ul>
+
+  <h2>16. Scenario: Real-Time vs Async Processing</h2>
+
+  <p>
+    <strong>Question:</strong> You need real-time vs async processing. When do you choose Future vs Queueable vs Platform Events?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Choose based on use case:
+  </p>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <th style="border: 1px solid #ccc; padding: 8px;">Tool</th>
+      <th style="border: 1px solid #ccc; padding: 8px;">Use Case</th>
+      <th style="border: 1px solid #ccc; padding: 8px;">Best For</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Synchronous</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Real-time, user-facing</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Form submissions, validation</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>@future</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Simple async, non-chainable</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">API callouts, async updates</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Queueable</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Chainable async jobs</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Multi-step async workflows</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 8px;"><strong>Platform Events</strong></td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Real-time, decoupled processing</td>
+      <td style="border: 1px solid #ccc; padding: 8px;">Microservices, integrations</td>
+    </tr>
+  </table>
+
+  <pre><code>
+// @future: Fire-and-forget API callout
+@future(callout=true)
+public static void sendApprovalNotification(Set<Id> recordIds) {
+    // Make HTTP callout
+}
+
+// Queueable: Chainable async with error handling
+public class ProcessOrdersQueueable implements Queueable {
+    private List<Order__c> orders;
+    
+    public ProcessOrdersQueueable(List<Order__c> orders) {
+        this.orders = orders;
+    }
+    
+    public void execute(QueueableContext ctx) {
+        // Process orders
+        for (Order__c order : orders) {
+            order.Status = 'Processed';
+        }
+        update orders;
+        
+        // Chain next job if more work needed
+        if (orders.size() >= 100) {
+            System.enqueueJob(new SendEmailsQueueable(orders));
+        }
+    }
+}
+
+// Platform Events: Real-time, event-driven
+trigger OrderTrigger on Order__c (after insert) {
+    List<Order_Created__e> events = new List<Order_Created__e>();
+    for (Order__c order : Trigger.new) {
+        events.add(new Order_Created__e(OrderId__c = order.Id));
+    }
+    EventBus.publish(events);
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>@future</code> – Best for simple, fire-and-forget operations</li>
+    <li><code>Queueable</code> – Best for chaining operations and complex workflows</li>
+    <li><code>Platform Events</code> – Best for real-time, decoupled microservice architecture</li>
+    <li><code>Batch</code> – Best for scheduled, large-scale operations</li>
+  </ul>
+
+  <h2>17. Scenario: Robust JSON Parsing with Error Handling</h2>
+
+  <p>
+    <strong>Question:</strong> An integration sends bad JSON sometimes. How do you handle robust error handling and parsing?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use try/catch with type checking and validation:
+  </p>
+
+  <pre><code>
+public class JSONParser {
+    public static Map<String, Object> safeParseJSON(String jsonString) {
+        try {
+            if (String.isBlank(jsonString)) {
+                throw new JSONException('Empty JSON string');
+            }
+
+            Map<String, Object> parsed = (Map<String, Object>) 
+                JSON.deserializeUntyped(jsonString);
+            
+            return parsed;
+        } catch (JSONException je) {
+            System.debug('JSON Parse Error: ' + je.getMessage());
+            throw new DataParsingException('Failed to parse JSON: ' + je.getMessage());
+        } catch (Exception e) {
+            System.debug('Unexpected error: ' + e.getMessage());
+            logParseError(jsonString, e.getMessage());
+            throw new DataParsingException('Unexpected parsing error: ' + e.getMessage());
+        }
+    }
+
+    public static Account parseAccountFromJSON(String jsonString) {
+        Map<String, Object> data = safeParseJSON(jsonString);
+
+        Account acc = new Account();
+        
+        // Safely extract fields with type checking
+        if (data.containsKey('name') && data.get('name') instanceof String) {
+            acc.Name = (String) data.get('name');
+        }
+
+        if (data.containsKey('phone') && data.get('phone') instanceof String) {
+            acc.Phone = (String) data.get('phone');
+        }
+
+        if (data.containsKey('revenue') && data.get('revenue') instanceof Decimal) {
+            acc.AnnualRevenue = (Decimal) data.get('revenue');
+        }
+
+        return acc;
+    }
+
+    private static void logParseError(String jsonData, String error) {
+        // Log to custom object or debug logs
+        System.debug(LoggingLevel.ERROR, 'Parse Error - Data: ' + jsonData + ', Error: ' + error);
+    }
+}
+
+public class DataParsingException extends Exception {}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Always validate JSON structure and field types</li>
+    <li>Use <code>instanceof</code> to check types before casting</li>
+    <li>Use <code>containsKey()</code> before accessing map values</li>
+    <li>Log parsing errors for debugging external integrations</li>
+    <li>Create custom exceptions for specific error scenarios</li>
+  </ul>
+
+  <h2>Final Summary</h2>
+
+  <p>
+    When preparing for Apex interviews, master these key competencies:
+  </p>
+
+  <ul>
+    <li><strong>Bulkification</strong> – Handle bulk operations without hitting governor limits</li>
+    <li><strong>Governor Limits</strong> – Know the 100 SOQL, 150 DML, 10s CPU limits</li>
+    <li><strong>Recursion Control</strong> – Prevent infinite loops with static flags</li>
+    <li><strong>Error Handling</strong> – Use try/catch and log appropriately</li>
+    <li><strong>Testing</strong> – Write comprehensive tests with @testSetup</li>
+    <li><strong>Security</strong> – Enforce FLS, CRUD, and prevent injection attacks</li>
+    <li><strong>Performance</strong> – Optimize queries with relationships and aggregations</li>
+    <li><strong>Asynchronous Processing</strong> – Know when to use Future, Queueable, Batch, and Platform Events</li>
+    <li><strong>API Integration</strong> – Handle callouts safely with timeouts and error handling</li>
+    <li><strong>Data Integrity</strong> – Avoid row locks and design batch processing wisely</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

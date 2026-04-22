@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Performance Tips</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>LWC Performance Tips – Caching, Lazy Loading</h1>
+
+  <p>
+    A fast Lightning Web Component feels more responsive and scales better. These performance tips focus on caching, lazy loading, and optimizing render cycles.
+  </p>
+
+  <h2>1. Use cacheable Apex with @wire</h2>
+
+  <p>
+    Mark Apex methods with <code>@AuraEnabled(cacheable=true)</code> so the framework can cache results.
+  </p>
+
+  <pre><code>
+@AuraEnabled(cacheable=true)
+public static List<Account> getAccounts() {
+    return [SELECT Id, Name, Industry FROM Account LIMIT 100];
+}
+  </code></pre>
+
+  <h2>2. Lazy Load Content</h2>
+
+  <p>
+    Only load expensive data when users need it, such as in tabs or expandable sections.
+  </p>
+
+  <pre><code>
+// example.js
+import { LightningElement, track } from 'lwc';
+import getLargeData from '@salesforce/apex/DataController.getLargeData';
+
+export default class Example extends LightningElement {
+    @track data;
+    @track loaded = false;
+
+    async handleShowDetails() {
+        if (!this.loaded) {
+            this.data = await getLargeData();
+            this.loaded = true;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>3. Load External Scripts and Styles Lazily</h2>
+
+  <pre><code>
+import { LightningElement } from 'lwc';
+import { loadScript, loadStyle } from 'lightning/platformResourceLoader';
+import chartJs from '@salesforce/resourceUrl/chartJs';
+
+export default class ChartComponent extends LightningElement {
+    renderedCallback() {
+        if (this.chartInitialized) {
+            return;
+        }
+        this.chartInitialized = true;
+
+        Promise.all([
+            loadScript(this, chartJs + '/chart.min.js'),
+            loadStyle(this, chartJs + '/chart.css')
+        ]).then(() => {
+            this.initializeChart();
+        });
+    }
+}
+  </code></pre>
+
+  <h2>4. Minimize Re-rendering</h2>
+
+  <p>
+    Avoid changing properties repeatedly in quick succession and prefer getters for computed values.
+  </p>
+
+  <pre><code>
+get formattedName() {
+    return `${this.firstName} ${this.lastName}`;
+}
+
+setFirstName(value) {
+    this.firstName = value;
+}
+
+setLastName(value) {
+    this.lastName = value;
+}
+  </code></pre>
+
+  <h2>5. Use trackable Patterns Sparingly</h2>
+
+  <p>
+    With modern LWC, only objects and arrays need <code>@track</code>. Simple fields are reactive by default.
+  </p>
+
+  <pre><code>
+// Prefer this
+myCount = 0;
+
+// Use @track only when updating nested properties
+@track account = { name: '', phone: '' };
+  </code></pre>
+
+  <h2>6. Batch DOM Queries</h2>
+
+  <p>
+    Query the DOM once instead of repeatedly inside loops.
+  </p>
+
+  <pre><code>
+renderedCallback() {
+    if (this.initialized) {
+        return;
+    }
+    this.initialized = true;
+
+    const elements = this.template.querySelectorAll('.item');
+    elements.forEach(el =&gt; {
+        el.classList.add('loaded');
+    });
+}
+  </code></pre>
+
+  <h2>7. Debounce User Input</h2>
+
+  <p>
+    Prevent too many updates by debouncing search fields and input events.
+  </p>
+
+  <pre><code>
+handleSearchChange(event) {
+    window.clearTimeout(this.searchTimeout);
+    this.searchTimeout = window.setTimeout(() => {
+        this.searchTerm = event.target.value;
+        this.performSearch();
+    }, 300);
+}
+  </code></pre>
+
+  <h2>8. Use Conditional Rendering</h2>
+
+  <p>
+    Render only the UI elements needed at a given moment.
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;template if:true={showDetails}&gt;
+        &lt;c-detail-panel data={detailData}&gt;&lt;/c-detail-panel&gt;
+    &lt;/template&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use <code>@AuraEnabled(cacheable=true)</code> for cached wire calls</li>
+    <li>Lazy load data and resources only when needed</li>
+    <li>Avoid unnecessary DOM queries and rerendering</li>
+    <li>Debounce rapid user input</li>
+    <li>Prefer lightweight templates with conditional rendering</li>
+    <li>Load third-party scripts/styles in renderedCallback once</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

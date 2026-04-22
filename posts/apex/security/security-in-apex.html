@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Security in Apex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Security in Apex – with sharing, FLS & CRUD Checks</h1>
+
+  <p>
+    Writing secure Apex code is critical. This guide covers three essential security mechanisms: sharing, Field-Level Security (FLS), and CRUD checks.
+  </p>
+
+  <h2>1. Understanding "with sharing" vs "without sharing"</h2>
+
+  <p>
+    The <code>with sharing</code> keyword enforces Salesforce's sharing model. The <code>without sharing</code> keyword bypasses it.
+  </p>
+
+  <h3>❌ Unsafe - without sharing</h3>
+  <pre><code>
+public without sharing class AccountService {
+    // This class can see ALL accounts regardless of user's sharing settings
+    
+    public static List&lt;Account&gt; getAllAccounts() {
+        return [SELECT Id, Name FROM Account];  // User sees all accounts!
+    }
+}
+  </code></pre>
+
+  <h3>✅ Secure - with sharing</h3>
+  <pre><code>
+public with sharing class AccountService {
+    // This class respects the user's sharing settings
+    
+    public static List&lt;Account&gt; getMyAccounts() {
+        // User only sees accounts they own or have been shared with
+        return [SELECT Id, Name FROM Account];
+    }
+}
+  </code></pre>
+
+  <h3>When to Use "without sharing"</h3>
+  <p>
+    Only use <code>without sharing</code> when you have a specific business reason and understand the security implications:
+  </p>
+
+  <pre><code>
+public without sharing class AdminUtility {
+    // Admin utility that needs to process all records regardless of sharing
+    
+    public static void updateAllRecordsStatus() {
+        // Carefully validate that this should bypass sharing
+        List&lt;Account&gt; allAccounts = [SELECT Id FROM Account];
+        // ... business logic
+    }
+}
+  </code></pre>
+
+  <h2>2. Field-Level Security (FLS) Checks</h2>
+
+  <p>
+    Always check if a user has access to a field before reading or writing it.
+  </p>
+
+  <h3>❌ Unsafe - No FLS Check</h3>
+  <pre><code>
+public class AccountProcessor {
+    public static void updateAccounts(List&lt;Account&gt; accounts) {
+        for (Account acc : accounts) {
+            acc.Sensitive_Data__c = 'secret value';  // No permission check!
+            update acc;
+        }
+    }
+}
+  </code></pre>
+
+  <h3>✅ Secure - Check FLS</h3>
+  <pre><code>
+public with sharing class AccountProcessor {
+    
+    public static Boolean userCanUpdateField(String objectName, String fieldName) {
+        // Check if field is accessible
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        DescribeSObjectResult objDescribe = objType.getDescribe();
+        DescribeFieldResult fieldDescribe = objDescribe.fields.getMap()
+                                                       .get(fieldName)
+                                                       .getDescribe();
+        
+        // Check create/update permission
+        return fieldDescribe.isUpdateable();
+    }
+    
+    public static void updateAccounts(List&lt;Account&gt; accounts) {
+        // Check FLS before accessing field
+        if (!userCanUpdateField('Account', 'Sensitive_Data__c')) {
+            throw new SecurityException('You do not have permission to update this field');
+        }
+        
+        for (Account acc : accounts) {
+            acc.Sensitive_Data__c = 'secret value';
+            update acc;
+        }
+    }
+}
+
+public class SecurityException extends Exception { }
+  </code></pre>
+
+  <h2>3. CRUD Checks (Create, Read, Update, Delete)</h2>
+
+  <p>
+    Always check if a user can perform CRUD operations before doing DML.
+  </p>
+
+  <h3>❌ Unsafe - No CRUD Check</h3>
+  <pre><code>
+public class AccountService {
+    public static void deleteAllAccounts(List&lt;Id&gt; accountIds) {
+        List&lt;Account&gt; accounts = [SELECT Id FROM Account WHERE Id IN :accountIds];
+        delete accounts;  // May fail if user doesn't have delete permission!
+    }
+}
+  </code></pre>
+
+  <h3>✅ Secure - Check CRUD Permissions</h3>
+  <pre><code>
+public with sharing class AccountService {
+    
+    public static Boolean userCanDelete(String objectName) {
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        DescribeSObjectResult objDescribe = objType.getDescribe();
+        
+        return objDescribe.isDeletable();
+    }
+    
+    public static Boolean userCanCreate(String objectName) {
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        DescribeSObjectResult objDescribe = objType.getDescribe();
+        
+        return objDescribe.isCreateable();
+    }
+    
+    public static Boolean userCanUpdate(String objectName) {
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        DescribeSObjectResult objDescribe = objType.getDescribe();
+        
+        return objDescribe.isUpdateable();
+    }
+    
+    public static void deleteAccounts(List&lt;Id&gt; accountIds) {
+        if (!userCanDelete('Account')) {
+            throw new SecurityException('You do not have permission to delete accounts');
+        }
+        
+        List&lt;Account&gt; accounts = [SELECT Id FROM Account WHERE Id IN :accountIds];
+        delete accounts;
+    }
+    
+    public static void createAccount(Account acc) {
+        if (!userCanCreate('Account')) {
+            throw new SecurityException('You do not have permission to create accounts');
+        }
+        
+        insert acc;
+    }
+}
+
+public class SecurityException extends Exception { }
+  </code></pre>
+
+  <h2>4. Comprehensive Security Utility</h2>
+
+  <pre><code>
+public with sharing class SecurityUtil {
+    
+    // Check if user can read object
+    public static Boolean canReadObject(String objectName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            return objType.getDescribe().isAccessible();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    // Check if user can create object
+    public static Boolean canCreateObject(String objectName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            return objType.getDescribe().isCreateable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    // Check if user can update object
+    public static Boolean canUpdateObject(String objectName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            return objType.getDescribe().isUpdateable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    // Check if user can delete object
+    public static Boolean canDeleteObject(String objectName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            return objType.getDescribe().isDeletable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    // Check if user can read field
+    public static Boolean canReadField(String objectName, String fieldName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            DescribeSObjectResult objDescribe = objType.getDescribe();
+            
+            DescribeFieldResult fieldDescribe = objDescribe.fields.getMap()
+                                                               .get(fieldName)
+                                                               .getDescribe();
+            return fieldDescribe.isAccessible();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    // Check if user can write field
+    public static Boolean canWriteField(String objectName, String fieldName) {
+        try {
+            SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+            DescribeSObjectResult objDescribe = objType.getDescribe();
+            
+            DescribeFieldResult fieldDescribe = objDescribe.fields.getMap()
+                                                               .get(fieldName)
+                                                               .getDescribe();
+            return fieldDescribe.isUpdateable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+}
+
+// Usage in your code
+public with sharing class SafeAccountService {
+    
+    public static void processAccounts(List&lt;Account&gt; accounts) {
+        // Check object-level permission
+        if (!SecurityUtil.canUpdateObject('Account')) {
+            throw new SecurityException('No update permission on Account');
+        }
+        
+        // Check field-level permission
+        if (!SecurityUtil.canWriteField('Account', 'Description')) {
+            throw new SecurityException('No permission to update Account.Description field');
+        }
+        
+        for (Account acc : accounts) {
+            acc.Description = 'Updated';
+        }
+        
+        update accounts;
+    }
+}
+  </code></pre>
+
+  <h2>5. Common Security Best Practices</h2>
+
+  <h3>Always Use Parameterized Queries</h3>
+  <pre><code>
+// ❌ Vulnerable to injection
+String searchTerm = 'Acme'; // Could be malicious input
+List&lt;Account&gt; accounts = [SELECT Id FROM Account WHERE Name = :searchTerm];
+
+// ✅ Safe - uses bind variables
+String searchTerm = 'Acme';
+List&lt;Account&gt; accounts = [SELECT Id FROM Account WHERE Name = :searchTerm];
+  </code></pre>
+
+  <h3>Validate User Input</h3>
+  <pre><code>
+public with sharing class InputValidator {
+    public static String sanitizeInput(String input) {
+        if (String.isBlank(input)) {
+            return null;
+        }
+        
+        // Remove potentially dangerous characters
+        return input.replaceAll('[^a-zA-Z0-9 ]', '');
+    }
+    
+    public static void createAccount(String name) {
+        String safeName = sanitizeInput(name);
+        
+        if (String.isBlank(safeName)) {
+            throw new ValidationException('Invalid account name');
+        }
+        
+        Account acc = new Account(Name = safeName);
+        insert acc;
+    }
+}
+
+public class ValidationException extends Exception { }
+  </code></pre>
+
+  <h2>6. Security Checklist</h2>
+
+  <ul>
+    <li>✅ Use <code>with sharing</code> on all public classes by default</li>
+    <li>✅ Check CRUD permissions before insert/update/delete</li>
+    <li>✅ Check FLS before reading/writing fields</li>
+    <li>✅ Validate all user input</li>
+    <li>✅ Use bind variables in SOQL queries</li>
+    <li>✅ Log security violations</li>
+    <li>✅ Document why <code>without sharing</code> is needed</li>
+    <li>✅ Use named credentials instead of hardcoding API keys</li>
+  </ul>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Default to <code>with sharing</code> to respect Salesforce's sharing model</li>
+    <li>Always check CRUD and FLS before working with data</li>
+    <li>Create a reusable SecurityUtil class for permission checks</li>
+    <li>Validate all user input to prevent injection attacks</li>
+    <li>Never hardcode API keys – use Named Credentials</li>
+    <li>Only use <code>without sharing</code> when absolutely necessary</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

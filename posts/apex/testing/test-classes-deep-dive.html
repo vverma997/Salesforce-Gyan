@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Classes Deep Dive</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Test Classes Deep Dive – 100% Coverage the Right Way & Test Data Setup</h1>
+
+  <p>
+    Test classes are mandatory in Salesforce. You need at least 75% code coverage to deploy to production, but aiming for 100% with meaningful tests is the real goal. This guide covers writing effective test classes and test data setup.
+  </p>
+
+  <h2>1. The Right Way to Write Test Classes</h2>
+
+  <h3>Basic Test Class Structure</h3>
+  <pre><code>
+@isTest
+private class AccountServiceTest {
+    
+    @TestSetup
+    static void setup() {
+        // Test data creation runs once for all tests
+        insertTestAccounts();
+    }
+    
+    @isTest
+    static void testPositiveScenario() {
+        // Arrange
+        List&lt;Account&gt; accounts = [SELECT Id FROM Account LIMIT 1];
+        
+        // Act
+        AccountService.processAccounts(accounts);
+        
+        // Assert
+        List&lt;Account&gt; updatedAccounts = [SELECT Id, Rating FROM Account];
+        System.assertEquals('Hot', updatedAccounts[0].Rating);
+    }
+    
+    @isTest
+    static void testNegativeScenario() {
+        Account acc = new Account(Name = 'Test Account', Revenue = 0);
+        insert acc;
+        
+        try {
+            AccountService.validateRevenue(acc);
+            System.assert(false, 'Should have thrown exception');
+        } catch (CustomException e) {
+            System.assert(e.getMessage().contains('Revenue required'));
+        }
+    }
+    
+    @isTest
+    static void testEdgeCase() {
+        // Test boundary conditions, null values, empty lists
+        AccountService.processAccounts(new List&lt;Account&gt;());
+        // Should not throw error
+    }
+    
+    private static void insertTestAccounts() {
+        List&lt;Account&gt; accounts = new List&lt;Account&gt;();
+        for (Integer i = 0; i &lt; 10; i++) {
+            accounts.add(new Account(
+                Name = 'Test Account ' + i,
+                Revenue = 100000 + (i * 10000)
+            ));
+        }
+        insert accounts;
+    }
+}
+  </code></pre>
+
+  <h2>2. Test Data Factory Pattern</h2>
+
+  <p>
+    Use a dedicated factory class to create test data. This keeps your tests clean and DRY.
+  </p>
+
+  <pre><code>
+@isTest
+public class TestDataFactory {
+    
+    public static Account createAccount(String name, String rating) {
+        Account acc = new Account(
+            Name = name,
+            Rating = rating,
+            Phone = '555-1234'
+        );
+        insert acc;
+        return acc;
+    }
+    
+    public static List&lt;Contact&gt; createContacts(Integer count, Id accountId) {
+        List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+        for (Integer i = 0; i &lt; count; i++) {
+            contacts.add(new Contact(
+                FirstName = 'Test',
+                LastName = 'Contact ' + i,
+                AccountId = accountId,
+                Email = 'test' + i + '@example.com'
+            ));
+        }
+        insert contacts;
+        return contacts;
+    }
+    
+    public static Opportunity createOpportunity(Id accountId, String stageName) {
+        Opportunity opp = new Opportunity(
+            Name = 'Test Opportunity',
+            AccountId = accountId,
+            StageName = stageName,
+            CloseDate = Date.today().addDays(30),
+            Amount = 50000
+        );
+        insert opp;
+        return opp;
+    }
+}
+
+// Usage in tests
+@isTest
+private class OpportunityServiceTest {
+    @isTest
+    static void testOpportunityStage() {
+        Account acc = TestDataFactory.createAccount('Acme Corp', 'Hot');
+        Opportunity opp = TestDataFactory.createOpportunity(acc.Id, 'Prospecting');
+        
+        OpportunityService.updateStage(opp.Id, 'Negotiation/Review');
+        
+        Opportunity updatedOpp = [SELECT StageName FROM Opportunity WHERE Id = :opp.Id];
+        System.assertEquals('Negotiation/Review', updatedOpp.StageName);
+    }
+}
+  </code></pre>
+
+  <h2>3. Testing Bulk Data</h2>
+
+  <p>
+    Tests should verify your code works with bulk data. This catches bulkification issues and governor limit problems.
+  </p>
+
+  <pre><code>
+@isTest
+private class BulkAccountTriggerTest {
+    
+    @isTest
+    static void testBulkInsert() {
+        List&lt;Account&gt; accounts = new List&lt;Account&gt;();
+        
+        // Create 200 accounts (max bulk size)
+        for (Integer i = 0; i &lt; 200; i++) {
+            accounts.add(new Account(
+                Name = 'Bulk Account ' + i,
+                BillingCity = 'San Francisco'
+            ));
+        }
+        
+        insert accounts;
+        
+        // Verify trigger processed all records
+        List&lt;Account&gt; verifyAccounts = [SELECT Id, Description FROM Account WHERE Name LIKE 'Bulk Account%'];
+        System.assertEquals(200, verifyAccounts.size());
+        
+        for (Account acc : verifyAccounts) {
+            System.assert(acc.Description != null);
+        }
+    }
+}
+  </code></pre>
+
+  <h2>4. Testing Triggers The Right Way</h2>
+
+  <pre><code>
+@isTest
+private class AccountTriggerTest {
+    
+    @TestSetup
+    static void setup() {
+        TestDataFactory.createAccount('Test Account', 'Hot');
+    }
+    
+    @isTest
+    static void testBeforeInsert() {
+        Account acc = new Account(
+            Name = 'New Account',
+            BillingCity = null
+        );
+        
+        insert acc;
+        
+        // Trigger should set default city
+        Account inserted = [SELECT BillingCity FROM Account WHERE Id = :acc.Id];
+        System.assertEquals('San Francisco', inserted.BillingCity);
+    }
+    
+    @isTest
+    static void testAfterInsert() {
+        Account parentAcc = [SELECT Id FROM Account LIMIT 1];
+        
+        Account newAcc = new Account(
+            Name = 'Child Account',
+            ParentId = parentAcc.Id,
+            Type = 'Subsidiary'
+        );
+        insert newAcc;
+        
+        // Trigger should create activity
+        List&lt;Task&gt; tasks = [SELECT Id FROM Task WHERE WhoId = :newAcc.Id];
+        System.assertEquals(1, tasks.size());
+    }
+    
+    @isTest
+    static void testTriggerNotRecursive() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Name = 'Updated Name';
+        
+        update acc;  // Should not cause infinite loop
+        
+        // Add assertion to verify expected behavior
+        System.assert(true);  // Passed without recursion error
+    }
+}
+  </code></pre>
+
+  <h2>5. Achieving 100% Code Coverage</h2>
+
+  <h3>Coverage Checklist</h3>
+  <pre><code>
+✓ Happy path (normal execution)
+✓ Negative scenarios (exceptions, invalid data)
+✓ Edge cases (null values, empty lists, boundary conditions)
+✓ All if/else branches
+✓ All loops with different iteration counts
+✓ Exception handling (try/catch blocks)
+✓ Bulk operations (200 records)
+  </code></pre>
+
+  <h3>Finding Uncovered Lines</h3>
+  <p>In Developer Console:</p>
+  <ul>
+    <li>Run test → Check "Overall Coverage"</li>
+    <li>Click class name to see highlighted uncovered lines</li>
+    <li>Write tests to cover those lines</li>
+  </ul>
+
+  <h2>6. Best Practices</h2>
+
+  <h3>Use @isTest Annotation</h3>
+  <pre><code>
+// Mark test classes and methods
+@isTest
+private class MyTest {
+    @isTest
+    static void testSomething() { }
+}
+
+// Mark test utilities
+@isTest
+public class TestHelper { }
+  </code></pre>
+
+  <h3>Keep Test Data Isolated</h3>
+  <pre><code>
+// Use System.Test.startTest() and stopTest()
+@isTest
+static void testWithIsolation() {
+    Account acc = TestDataFactory.createAccount('Test', 'Hot');
+    
+    Test.startTest();
+    // Test code here - governor limits reset
+    AccountService.processAccount(acc);
+    Test.stopTest();
+    
+    // Assertions after stopTest()
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Aim for 100% coverage, not just 75% minimum</li>
+    <li>Use TestSetup for shared test data</li>
+    <li>Use TestDataFactory for clean, DRY test data</li>
+    <li>Test happy path, negative scenarios, and edge cases</li>
+    <li>Test with bulk data (200 records)</li>
+    <li>Verify governor limits aren't exceeded</li>
+    <li>Use System.assert() for meaningful assertions</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

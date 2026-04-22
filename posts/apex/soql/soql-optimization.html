@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SOQL Optimization</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>SOQL Optimization – Avoiding Limits & Selective Queries</h1>
+
+  <p>
+    SOQL is limited to 100 queries per transaction. Writing optimized queries prevents hitting this limit and improves performance. This guide covers query optimization techniques.
+  </p>
+
+  <h2>1. The N+1 Problem: SOQL in Loops</h2>
+
+  <h3>❌ Bad - Query in Loop (N+1 Problem)</h3>
+  <pre><code>
+// This is a common antipattern
+List&lt;Account&gt; accounts = [SELECT Id FROM Account LIMIT 100];
+
+for (Account acc : accounts) {
+    // Each iteration = 1 query! Total: 101 queries!
+    List&lt;Opportunity&gt; opps = [SELECT Id FROM Opportunity WHERE AccountId = :acc.Id];
+    System.debug('Account ' + acc.Id + ' has ' + opps.size() + ' opportunities');
+}
+
+// Result: Hit 100 query limit!
+  </code></pre>
+
+  <h3>✅ Good - Single Query with Aggregation</h3>
+  <pre><code>
+// Query once, process all data
+Map&lt;Id, List&lt;Opportunity&gt;&gt; oppsByAccount = new Map&lt;Id, List&lt;Opportunity&gt;&gt;();
+
+for (Opportunity opp : [SELECT Id, AccountId FROM Opportunity LIMIT 10000]) {
+    if (!oppsByAccount.containsKey(opp.AccountId)) {
+        oppsByAccount.put(opp.AccountId, new List&lt;Opportunity&gt;());
+    }
+    oppsByAccount.get(opp.AccountId).add(opp);
+}
+
+List&lt;Account&gt; accounts = [SELECT Id FROM Account LIMIT 100];
+
+for (Account acc : accounts) {
+    List&lt;Opportunity&gt; opps = oppsByAccount.get(acc.Id);
+    // No queries in loop!
+}
+  </code></pre>
+
+  <h2>2. Using Relationships (Child to Parent Queries)</h2>
+
+  <h3>✅ Query Related Objects in Single Query</h3>
+  <pre><code>
+// Get opportunities WITH account data - one query!
+List&lt;Opportunity&gt; opps = [
+    SELECT Id, Name, Amount, Account.Name, Account.Industry
+    FROM Opportunity
+    LIMIT 1000
+];
+
+for (Opportunity opp : opps) {
+    System.debug('Opportunity: ' + opp.Name);
+    System.debug('Account: ' + opp.Account.Name);
+    // No additional queries needed
+}
+  </code></pre>
+
+  <h3>Parent-to-Child Relationships</h3>
+  <pre><code>
+// Get accounts WITH all opportunities
+List&lt;Account&gt; accounts = [
+    SELECT Id, Name, (SELECT Id, Name, Amount FROM Opportunities)
+    FROM Account
+    LIMIT 100
+];
+
+for (Account acc : accounts) {
+    System.debug('Account: ' + acc.Name);
+    for (Opportunity opp : acc.Opportunities) {
+        System.debug('  - Opportunity: ' + opp.Name);
+    }
+}
+  </code></pre>
+
+  <h2>3. Selective Filtering (WHERE Clauses)</h2>
+
+  <h3>❌ Bad - Query All, Filter in Code</h3>
+  <pre><code>
+List&lt;Account&gt; allAccounts = [SELECT Id, Name, Revenue FROM Account];
+
+List&lt;Account&gt; hotAccounts = new List&lt;Account&gt;();
+for (Account acc : allAccounts) {
+    if (acc.Revenue &gt; 1000000) {
+        hotAccounts.add(acc);
+    }
+}
+
+// Inefficient - loads unnecessary data
+  </code></pre>
+
+  <h3>✅ Good - Filter in WHERE Clause</h3>
+  <pre><code>
+List&lt;Account&gt; hotAccounts = [
+    SELECT Id, Name, Revenue
+    FROM Account
+    WHERE Revenue &gt; 1000000
+];
+
+// Much better - database filters for you
+  </code></pre>
+
+  <h2>4. Indexing and Query Performance</h2>
+
+  <p>
+    Salesforce is fast when you query on indexed fields. Standard indexes include:
+  </p>
+  <ul>
+    <li>Id</li>
+    <li>Name (on most objects)</li>
+    <li>CreatedDate</li>
+    <li>SystemModstamp</li>
+    <li>External ID fields</li>
+  </ul>
+
+  <h3>✅ Good - Query on indexed fields</h3>
+  <pre><code>
+// Fast - searching by  Id
+Account acc = [SELECT Id, Name FROM Account WHERE Id = :accountId];
+
+// Fast - searching by Name
+List&lt;Account&gt; accounts = [SELECT Id FROM Account WHERE Name LIKE 'Acme%'];
+
+// Fast - searching by CreatedDate
+List&lt;Account&gt; newAccounts = [
+    SELECT Id FROM Account
+    WHERE CreatedDate = LAST_N_DAYS:30
+];
+
+// Fast - searching by external ID
+Contact con = [SELECT Id FROM Contact WHERE External_ID__c = :externalId];
+  </code></pre>
+
+  <h2>5. Selective Field Selection</h3>
+
+  <h3>❌ Bad - Select All Fields</h3>
+  <pre><code>
+List&lt;Account&gt; accounts = [SELECT * FROM Account];
+
+// * means all fields - slow for large objects!
+  </code></pre>
+
+  <h3>✅ Good - Select Only Needed Fields</h3>
+  <pre><code>
+List&lt;Account&gt; accounts = [
+    SELECT Id, Name, Phone, BillingCity
+    FROM Account
+    LIMIT 1000
+];
+
+// Only request what you need
+  </code></pre>
+
+  <h2>6. Batch Processing Large Queries</h2>
+
+  <p>
+    If you need to process millions of records, use Batch Apex:
+  </p>
+
+  <pre><code>
+global class ProcessAllAccountsBatch implements Database.Batchable&lt;sObject&gt; {
+    
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query all records
+        return Database.getQueryLocator([
+            SELECT Id, Name, Rating FROM Account
+        ]);
+    }
+    
+    global void execute(Database.BatchableContext bc, List&lt;SObject&gt; scope) {
+        // Process in batches of 200 (default)
+        List&lt;Account&gt; accounts = (List&lt;Account&gt;) scope;
+        
+        for (Account acc : accounts) {
+            // Process each account
+            acc.Rating = 'Hot';
+        }
+        update accounts;
+    }
+    
+    global void finish(Database.BatchableContext bc) { }
+}
+
+// Execute
+Database.executeBatch(new ProcessAllAccountsBatch(), 200);
+  </code></pre>
+
+  <h2>7. Avoiding Common SOQL Mistakes</h3>
+
+  <h3>❌ Bad - Using OFFSET</h3>
+  <pre><code>
+// Slow - scans all records before offset
+List&lt;Account&gt; accounts = [
+    SELECT Id FROM Account
+    LIMIT 1000
+    OFFSET 50000  // Scans 50k records just to skip them!
+];
+  </code></pre>
+
+  <h3>✅ Good - Use pagination with Id</h3>
+  <pre><code>
+// Efficient - uses index
+List&lt;Account&gt; accounts = [
+    SELECT Id FROM Account
+    WHERE Id &gt; :lastId  // Remember last Id from previous page
+    ORDER BY Id
+    LIMIT 1000
+];
+  </code></pre>
+
+  <h2>8. Query Optimization Checklist</h2>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ccc; padding: 10px;">Optimization</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Impact</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ SOQL in loops</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Hits 100 query limit</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Single query + map</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Efficient, stays under limit</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Selective WHERE</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Faster, less data</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Specific fields</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Smaller payload</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Relationship queries</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Combines data in one query</td>
+    </tr>
+  </table>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Never query in loops - use a single query and build maps</li>
+    <li>Use relationship queries (. notation) to combine data</li>
+    <li>Filter in WHERE clause, not in application code</li>
+    <li>Query only the fields you need</li>
+    <li>Index your custom fields used in WHERE clauses</li>
+    <li>Use Batch Apex for processing millions of records</li>
+    <li>Avoid OFFSET - use Id-based pagination instead</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

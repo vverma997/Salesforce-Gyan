@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trigger Best Practices</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trigger Best Practices</h1>
+
+  <p>
+    Apex triggers are powerful, but they can also become hard to maintain if you don’t follow a few simple rules.
+    These best practices help keep your triggers clean, efficient, and safe for production.
+  </p>
+
+  <h2>1. Keep the trigger body thin</h2>
+
+  <p>
+    The trigger should only decide what event is running and delegate the work to handler classes.
+    This makes your code easier to test and easier to understand.
+  </p>
+
+  <pre><code>
+trigger AccountTrigger on Account (before insert, before update, after update) {
+    if (Trigger.isBefore) {
+        AccountTriggerHandler.beforeSave(Trigger.new, Trigger.oldMap);
+    }
+
+    if (Trigger.isAfter) {
+        AccountTriggerHandler.afterSave(Trigger.new, Trigger.oldMap);
+    }
+}
+  </code></pre>
+
+  <h2>2. Always write for bulk data</h2>
+
+  <p>
+    Salesforce can process up to 200 records in a single trigger invocation.
+    That means no single-record logic, no SOQL inside loops, and no DML inside loops.
+  </p>
+
+  <pre><code>
+for (Account acc : Trigger.new) {
+    if (acc.IsActive__c) {
+        activeAccounts.add(acc);
+    }
+}
+
+List&lt;Account&gt; updates = new List&lt;Account>();
+for (Account acc : activeAccounts) {
+    acc.Description = 'Active account';
+    updates.add(acc);
+}
+
+update updates;
+  </code></pre>
+
+  <h2>3. Use context checks</h2>
+
+  <p>
+    Guard your code with <code>Trigger.isInsert</code>, <code>Trigger.isUpdate</code>, <code>Trigger.isDelete</code>,
+    <code>Trigger.isBefore</code>, and <code>Trigger.isAfter</code> so each path runs only when it should.
+  </p>
+
+  <pre><code>
+if (Trigger.isBefore && Trigger.isUpdate) {
+    // validation logic
+}
+
+if (Trigger.isAfter && Trigger.isInsert) {
+    // post-save actions
+}
+  </code></pre>
+
+  <h2>4. Avoid hard-coded IDs and field names</h2>
+
+  <p>
+    Hard-coding IDs, API names, or object names makes your code brittle and hard to deploy across environments.
+    Use custom settings, custom metadata, or describe calls when needed.
+  </p>
+
+  <h2>5. Test bulk behavior and edge cases</h2>
+
+  <p>
+    Your tests should cover single record and multiple record scenarios, insert/update/delete flows, and error conditions.
+    This is the only way to catch trigger bugs before deployment.
+  </p>
+
+  <h2>Summary</h2>
+
+  <p>
+    Good trigger design is mostly about structure and discipline.
+    Keep triggers lean, use handler classes, always support bulk operations, and avoid doing too much in a single trigger.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

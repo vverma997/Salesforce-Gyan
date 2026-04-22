@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bulkification in Triggers</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Bulkification in Triggers — Why It Matters</h1>
+
+  <p>
+    One of the biggest mistakes beginners make in Apex is writing triggers that only work for a single record.
+    But Salesforce never guarantees that.
+  </p>
+
+  <p>
+    Records can come in bulk — from UI, Data Loader, APIs, or integrations.
+    If your code isn’t built for that, it will break or hit governor limits.
+  </p>
+
+  <h2>What is Bulkification?</h2>
+
+  <p>
+    Bulkification simply means writing code that can handle multiple records at once instead of one at a time.
+  </p>
+
+  <h2>Bad Example (Not Bulkified)</h2>
+
+  <pre><code>
+trigger AccountTrigger on Account (after insert) {
+    for (Account acc : Trigger.new) {
+        Contact c = new Contact(
+            LastName = acc.Name,
+            AccountId = acc.Id
+        );
+        insert c; // ❌ DML inside loop
+    }
+}
+  </code></pre>
+
+  <p>
+    This will fail when multiple records are processed because it performs DML inside a loop.
+  </p>
+
+  <h2>Good Example (Bulkified)</h2>
+
+  <pre><code>
+trigger AccountTrigger on Account (after insert) {
+    List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+
+    for (Account acc : Trigger.new) {
+        contacts.add(new Contact(
+            LastName = acc.Name,
+            AccountId = acc.Id
+        ));
+    }
+
+    insert contacts; // ✅ Single DML
+}
+  </code></pre>
+
+  <p>
+    Here, we collect all records first and perform a single DML operation.
+  </p>
+
+  <h2>Key Rules to Follow</h2>
+
+  <ul>
+    <li>Never write DML inside loops</li>
+    <li>Never write SOQL inside loops</li>
+    <li>Always use collections (List, Set, Map)</li>
+    <li>Assume multiple records always</li>
+  </ul>
+
+  <h2>Why this matters</h2>
+
+  <p>
+    Salesforce has strict governor limits. If your code is not bulkified,
+    it will work in testing but fail in real scenarios.
+  </p>
+
+  <h2>One simple rule</h2>
+
+  <p>
+    Always write your trigger as if it will handle 200 records at once.
+  </p>
+
+  <p>
+    Do this right, and your code becomes scalable, stable, and production-ready.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

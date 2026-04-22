@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lightning Data Service in LWC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Lightning Data Service (LDS) – Avoid Unnecessary Apex</h1>
+
+  <p>
+    Lightning Data Service provides built-in record access and caching without Apex. LDS is ideal for simple record display and editing.
+  </p>
+
+  <h2>1. Basic getRecord Usage</h2>
+
+  <pre><code>
+import { LightningElement, api, wire } from 'lwc';
+import { getRecord } from 'lightning/uiRecordApi';
+
+const FIELDS = ['Account.Name', 'Account.Phone', 'Account.Industry'];
+
+export default class AccountViewer extends LightningElement {
+    @api recordId;
+
+    @wire(getRecord, { recordId: '$recordId', fields: FIELDS })
+    account;
+}
+  </code></pre>
+
+  <h3>Template</h3>
+  <pre><code>
+&lt;template&gt;
+    &lt;template if:true={account.data}&gt;
+        &lt;p&gt;Name: {account.data.fields.Name.value}&lt;/p&gt;
+        &lt;p&gt;Phone: {account.data.fields.Phone.value}&lt;/p&gt;
+    &lt;/template&gt;
+    &lt;template if:true={account.error}&gt;
+        &lt;p class="error"&gt;Error loading record&lt;/p&gt;
+    &lt;/template&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>2. Record Edit Form</h2>
+
+  <p>
+    Use <code>lightning-record-edit-form</code> to handle record updates without Apex.
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-record-edit-form 
+        record-id={recordId}
+        object-api-name="Account"
+        onsuccess={handleSuccess}
+        onerror={handleError}
+    &gt;
+        &lt;lightning-messages&gt;&lt;/lightning-messages&gt;
+        &lt;lightning-input-field field-name="Name"&gt;&lt;/lightning-input-field&gt;
+        &lt;lightning-input-field field-name="Phone"&gt;&lt;/lightning-input-field&gt;
+        &lt;lightning-button type="submit" label="Save" variant="brand"&gt;&lt;/lightning-button&gt;
+    &lt;/lightning-record-edit-form&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>3. getObjectInfo for Metadata</h2>
+
+  <pre><code>
+import { LightningElement, wire } from 'lwc';
+import { getObjectInfo } from 'lightning/uiObjectInfoApi';
+import ACCOUNT_OBJECT from '@salesforce/schema/Account';
+
+export default class AccountInfo extends LightningElement {
+    @wire(getObjectInfo, { objectApiName: ACCOUNT_OBJECT })
+    objectInfo;
+}
+  </code></pre>
+
+  <h2>4. getPicklistValues</h2>
+
+  <pre><code>
+import { LightningElement, wire, track } from 'lwc';
+import { getPicklistValues } from 'lightning/uiObjectInfoApi';
+import ACCOUNT_OBJECT from '@salesforce/schema/Account';
+import INDUSTRY_FIELD from '@salesforce/schema/Account.Industry';
+
+export default class IndustrySelector extends LightningElement {
+    @track industryOptions;
+
+    @wire(getPicklistValues, {
+        recordTypeId: '012000000000000AAA',
+        fieldApiName: INDUSTRY_FIELD
+    })
+    wiredPicklist({ error, data }) {
+        if (data) {
+            this.industryOptions = data.values;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>5. Advantages of LDS</h2>
+
+  <ul>
+    <li>No Apex required for display and edit operations</li>
+    <li>Automatic sharing and security enforcement</li>
+    <li>Built-in caching and performance optimization</li>
+    <li>Improved maintenance and fewer server-side points of failure</li>
+  </ul>
+
+  <h2>6. When to Use Apex Instead</h2>
+
+  <p>
+    Use Apex when data requires complex aggregation, custom search, or non-CRUD business logic.
+  </p>
+
+  <ul>
+    <li>Complex queries across multiple objects</li>
+    <li>Custom calculations before data display</li>
+    <li>Multiple DML operations in a single transaction</li>
+    <li>REST callouts or integration logic</li>
+  </ul>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use LDS to avoid unnecessary Apex for record UI</li>
+    <li>Prefer <code>lightning/uiRecordApi</code> for simple display and edit</li>
+    <li>Use <code>lightning-record-edit-form</code> for standard edit UX</li>
+    <li>Leverage <code>getRecord</code>, <code>getObjectInfo</code>, and <code>getPicklistValues</code></li>
+    <li>Use Apex only for advanced business logic and aggregated data</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

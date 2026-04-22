@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Asynchronous Apex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Asynchronous Apex – Future, Queueable, Batch with Use Cases</h1>
+
+  <p>
+    Sometimes your code runs too long or makes too many callouts for synchronous execution. Salesforce provides three mechanisms for asynchronous processing: @future methods, Queueable Apex, and Batch Apex. Each has different use cases.
+  </p>
+
+  <h2>1. @future Methods</h2>
+
+  <p>
+    <strong>@future</strong> is the simplest async approach. It executes in the future, separate from the request that scheduled it.
+  </p>
+
+  <h3>Use Case: Send Bulk Email Notifications</h3>
+  <pre><code>
+public class NotificationService {
+    
+    @future(callout=true)
+    public static void sendEmailAsync(Set&lt;Id&gt; userIds, String subject, String body) {
+        List&lt;Messaging.SingleEmailMessage&gt; mails = new List&lt;Messaging.SingleEmailMessage&gt;();
+        
+        for (Id userId : userIds) {
+            Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+            mail.setTargetObjectId(userId);
+            mail.setSubject(subject);
+            mail.setPlainTextBody(body);
+            mails.add(mail);
+        }
+        
+        Messaging.sendEmail(mails);
+    }
+}
+
+// Called from trigger or class
+trigger OrderTrigger on Order (after insert) {
+    Set&lt;Id&gt; accountOwnerIds = new Set&lt;Id&gt;();
+    
+    for (Order ord : Trigger.new) {
+        // Collect owner IDs
+    }
+    
+    NotificationService.sendEmailAsync(accountOwnerIds, 'New Order', 'Order placed successfully');
+}
+  </code></pre>
+
+  <h3>Limitations of @future</h3>
+  <ul>
+    <li>Cannot accept objects as parameters (only primitives, collections of primitives, or sObjects)</li>
+    <li>Cannot call another @future method</li>
+    <li>No way to monitor progress</li>
+    <li>Difficult to retry on failure</li>
+  </ul>
+
+  <h2>2. Queueable Apex (Recommended)</h2>
+
+  <p>
+    <strong>Queueable</strong> Apex is more powerful than @future. It allows passing objects, returns a Job ID for tracking, and supports chaining.
+  </p>
+
+  <h3>Use Case: Chain Multiple Data Transformations</h3>
+  <pre><code>
+public class CalculateAccountMetrics implements Queueable {
+    private List&lt;Account&gt; accounts;
+    private String nextStep;
+    
+    public CalculateAccountMetrics(List&lt;Account&gt; accounts, String nextStep) {
+        this.accounts = accounts;
+        this.nextStep = nextStep;
+    }
+    
+    public void execute(QueueableContext context) {
+        // Calculate metrics
+        for (Account acc : accounts) {
+            acc.Total_Revenue__c = calculateRevenue(acc.Id);
+            acc.Customer_Tier__c = determineTier(acc.Total_Revenue__c);
+        }
+        update accounts;
+        
+        // Chain next job
+        if (nextStep == 'notify') {
+            System.enqueueJob(new NotifyCustomersQueueable(accounts));
+        }
+    }
+    
+    private Decimal calculateRevenue(Id accountId) {
+        // Complex revenue calculation
+        List&lt;Opportunity&gt; opps = [SELECT Amount FROM Opportunity WHERE AccountId = :accountId AND IsClosed = true];
+        Decimal total = 0;
+        for (Opportunity opp : opps) {
+            total += opp.Amount;
+        }
+        return total;
+    }
+    
+    private String determineTier(Decimal revenue) {
+        if (revenue &gt;= 1000000) return 'Platinum';
+        if (revenue &gt;= 500000) return 'Gold';
+        if (revenue &gt;= 100000) return 'Silver';
+        return 'Bronze';
+    }
+}
+
+// Called from trigger
+trigger AccountTrigger on Account (after insert) {
+    System.enqueueJob(new CalculateAccountMetrics(Trigger.new, 'notify'));
+}
+  </code></pre>
+
+  <h3>Monitoring Queueable Jobs</h3>
+  <pre><code>
+String jobId = System.enqueueJob(new CalculateAccountMetrics(accounts, 'notify'));
+
+// Query job status
+AsyncApexJob jobStatus = [SELECT Id, Status, NumberOfErrors FROM AsyncApexJob WHERE Id = :jobId];
+System.debug('Job Status: ' + jobStatus.Status);
+  </code></pre>
+
+  <h3>Chaining Queueable Jobs</h3>
+  <pre><code>
+public class ChainedQueueable1 implements Queueable {
+    public void execute(QueueableContext context) {
+        // Do work
+        System.debug('Job 1 completed');
+        
+        // Chain next job
+        if (CanExecuteNext()) {
+            System.enqueueJob(new ChainedQueueable2());
+        }
+    }
+    
+    private Boolean CanExecuteNext() {
+        // Logic to decide if next job should run
+        return true;
+    }
+}
+  </code></pre>
+
+  <h2>3. Batch Apex</h2>
+
+  <p>
+    <strong>Batch Apex</strong> is for processing large datasets. It breaks records into batches, processes each batch separately, and tracks progress.
+  </p>
+
+  <h3>Use Case: Update Millions of Records</h3>
+  <pre><code>
+global class UpdateAccountRatingBatch implements Database.Batchable&lt;sObject&gt;, Database.Stateful {
+    
+    global Integer recordsProcessed = 0;
+    global Integer recordsWithError = 0;
+    
+    // Start method - query records
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Name, Annual_Revenue__c, Rating 
+            FROM Account 
+            WHERE IsDeleted = false
+        ]);
+    }
+    
+    // Execute method - process batch
+    global void execute(Database.BatchableContext bc, List&lt;Account&gt; accounts) {
+        List&lt;Account&gt; accountsToUpdate = new List&lt;Account&gt;();
+        
+        for (Account acc : accounts) {
+            if (acc.Annual_Revenue__c != null) {
+                if (acc.Annual_Revenue__c &gt;= 1000000) {
+                    acc.Rating = 'Hot';
+                } else if (acc.Annual_Revenue__c &gt;= 100000) {
+                    acc.Rating = 'Warm';
+                } else {
+                    acc.Rating = 'Cold';
+                }
+                accountsToUpdate.add(acc);
+                recordsProcessed++;
+            }
+        }
+        
+        // Use Database.update to continue on error
+        Database.SaveResult[] results = Database.update(accountsToUpdate, false);
+        
+        for (Database.SaveResult result : results) {
+            if (!result.isSuccess()) {
+                recordsWithError++;
+                System.debug('Error: ' + result.getErrors());
+            }
+        }
+    }
+    
+    // Finish method - handle completion
+    global void finish(Database.BatchableContext bc) {
+        System.debug('Batch job finished');
+        System.debug('Records processed: ' + recordsProcessed);
+        System.debug('Records with errors: ' + recordsWithError);
+        
+        // Send email summary
+        sendCompletionEmail(bc.getJobId());
+    }
+    
+    private void sendCompletionEmail(Id jobId) {
+        AsyncApexJob job = [SELECT Id, Status, NumberOfErrors FROM AsyncApexJob WHERE Id = :jobId];
+        
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+        mail.setToAddresses(new String[]{UserInfo.getUserEmail()});
+        mail.setSubject('Batch Job Completed');
+        mail.setPlainTextBody('Batch processed ' + recordsProcessed + ' records with ' + recordsWithError + ' errors.');
+        
+        Messaging.sendEmail(new Messaging.SingleEmailMessage[]{mail});
+    }
+}
+
+// Execute batch
+Database.executeBatch(new UpdateAccountRatingBatch(), 200);
+  </code></pre>
+
+  <h2>Comparison Table</h2>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ccc; padding: 10px;">Feature</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">@future</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Queueable</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Batch</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Can accept objects</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Can chain jobs</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Best for large data</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Job tracking</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+  </table>
+
+  <h2>Scheduled Batch Jobs</h2>
+
+  <p>
+    Run a batch job on a schedule using <strong>Schedulable</strong> interface:
+  </p>
+
+  <pre><code>
+global class ScheduledBatchJob implements Schedulable {
+    global void execute(SchedulableContext ctx) {
+        Database.executeBatch(new UpdateAccountRatingBatch(), 200);
+    }
+}
+
+// Schedule it
+String cronExpression = '0 0 0 * * ?';  // Daily at midnight
+System.schedule('Update Account Ratings', cronExpression, new ScheduledBatchJob());
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use <strong>@future</strong> for simple, one-off async tasks</li>
+    <li>Use <strong>Queueable</strong> for chaining and passing objects</li>
+    <li>Use <strong>Batch Apex</strong> for processing millions of records</li>
+    <li>Always use <strong>Database.update(list, false)</strong> to continue on errors</li>
+    <li>Monitor async jobs via AsyncApexJob query</li>
+    <li>Schedule batches using Schedulable interface</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

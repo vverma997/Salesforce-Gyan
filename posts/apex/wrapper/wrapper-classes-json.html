@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wrapper Classes & JSON Parsing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Wrapper Classes & JSON Parsing – Real API Examples</h1>
+
+  <p>
+    Wrapper classes help structure data, especially when working with APIs. Learn how to parse JSON responses and serialize objects for API requests.
+  </p>
+
+  <h2>1. Creating Wrapper Classes</h2>
+
+  <h3>Simple Wrapper Class</h3>
+  <pre><code>
+public class AccountWrapper {
+    public String id;
+    public String name;
+    public String email;
+    public Integer revenue;
+    
+    public AccountWrapper(Account acc) {
+        this.id = acc.Id;
+        this.name = acc.Name;
+        this.email = acc.Email__c;
+        this.revenue = (Integer) acc.Annual_Revenue__c;
+    }
+}
+
+// Usage
+Account acc = [SELECT Id, Name, Email__c, Annual_Revenue__c FROM Account LIMIT 1];
+AccountWrapper wrapper = new AccountWrapper(acc);
+String json = JSON.serialize(wrapper);
+System.debug(json);
+// Output: {"email":"test@example.com","id":"001xxxxxxx","name":"Acme Corp","revenue":1000000}
+  </code></pre>
+
+  <h2>2. Parsing JSON Responses from APIs</h3>
+
+  <h3>Real Example: Weather API Response</h3>
+  <pre><code>
+// Wrapper classes for API response
+public class WeatherResponse {
+    public String location;
+    public Double temperature;
+    public String condition;
+    public Double humidity;
+    public List&lt;Forecast&gt; forecast;
+    
+    // Maps JSON field names to Apex variable names
+    public WeatherResponse(Map&lt;String, Object&gt; data) {
+        this.location = (String) data.get('location');
+        this.temperature = (Double) data.get('temp');
+        this.condition = (String) data.get('condition');
+        this.humidity = (Double) data.get('humidity');
+    }
+}
+
+public class Forecast {
+    public String date;
+    public String condition;
+    public Double highTemp;
+    public Double lowTemp;
+}
+
+// API Call
+public class WeatherService {
+    public static WeatherResponse getWeather(String city) {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint('callout:WeatherAPI/current?city=' + city);
+        request.setMethod('GET');
+        
+        HttpResponse response = http.send(request);
+        
+        if (response.getStatusCode() == 200) {
+            // Parse JSON response
+            Map&lt;String, Object&gt; responseBody = (Map&lt;String, Object&gt;) JSON.deserializeUntyped(response.getBody());
+            WeatherResponse weather = new WeatherResponse(responseBody);
+            return weather;
+        }
+        
+        return null;
+    }
+}
+  </code></pre>
+
+  <h2>3. REST API Integration Example</h2>
+
+  <h3>Stripe Payment Integration</h3>
+  <pre><code>
+public class StripePaymentProcessor {
+    
+    // Request wrapper
+    public class PaymentRequest {
+        public Decimal amount;
+        public String currency;
+        public String description;
+        public String customer_id;
+    }
+    
+    // Response wrapper
+    public class PaymentResponse {
+        public String id;
+        public String status;  // succeeded, failed, pending
+        public Decimal amount;
+        public String error_message;
+    }
+    
+    public static PaymentResponse processPayment(Account acc, Decimal amount) {
+        try {
+            PaymentRequest req = new PaymentRequest();
+            req.amount = amount * 100;  // Convert to cents
+            req.currency = 'usd';
+            req.description = 'Payment for ' + acc.Name;
+            req.customer_id = acc.Stripe_Customer_ID__c;
+            
+            Http http = new Http();
+            HttpRequest request = new HttpRequest();
+            request.setEndpoint('callout:StripeAPI/v1/charges');
+            request.setMethod('POST');
+            request.setHeader('Content-Type', 'application/json');
+            request.setBody(JSON.serialize(req));
+            
+            HttpResponse response = http.send(request);
+            
+            if (response.getStatusCode() == 200) {
+                PaymentResponse result = (PaymentResponse) JSON.deserialize(
+                    response.getBody(), 
+                    PaymentResponse.class
+                );
+                return result;
+            } else {
+                PaymentResponse errorResult = new PaymentResponse();
+                errorResult.status = 'failed';
+                errorResult.error_message = response.getBody();
+                return errorResult;
+            }
+        } catch (Exception e) {
+            PaymentResponse errorResult = new PaymentResponse();
+            errorResult.status = 'failed';
+            errorResult.error_message = e.getMessage();
+            return errorResult;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>4. Complex Nested Wrappers</h2>
+
+  <h3>GitHub API Response</h3>
+  <pre><code>
+public class GitHubUser {
+    public String login;
+    public Integer id;
+    public String avatar_url;
+    public String bio;
+    public Integer public_repos;
+    public List&lt;Repository&gt; repositories;
+}
+
+public class Repository {
+    public String name;
+    public String description;
+    public String url;
+    public Boolean is_private;
+    public Integer stargazers_count;
+}
+
+// Parsing nested JSON
+public class GitHubService {
+    public static GitHubUser getUserProfile(String username) {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint('https://api.github.com/users/' + username);
+        request.setMethod('GET');
+        request.setHeader('Accept', 'application/vnd.github.v3+json');
+        
+        HttpResponse response = http.send(request);
+        
+        if (response.getStatusCode() == 200) {
+            GitHubUser user = (GitHubUser) JSON.deserialize(
+                response.getBody(), 
+                GitHubUser.class
+            );
+            return user;
+        }
+        return null;
+    }
+}
+  </code></pre>
+
+  <h2>5. Handling Special Field Names</h2>
+
+  <p>
+    JSON often uses different naming conventions than Apex. Use <code>@AuraEnabled</code> or custom deserialization:
+  </p>
+
+  <pre><code>
+public class ApiResponse {
+    @AuraEnabled
+    public String first_name;  // Maps from JSON "first_name"
+    
+    @AuraEnabled  
+    public String last_name;   // Maps from JSON "last_name"
+    
+    @AuraEnabled
+    public String email_address;
+}
+
+// Or manually map field names
+public class CustomMapping {
+    public String firstName;
+    public String lastName;
+    
+    public CustomMapping(Map&lt;String, Object&gt; data) {
+        this.firstName = (String) data.get('first_name');
+        this.lastName = (String) data.get('last_name');
+    }
+}
+  </code></pre>
+
+  <h2>6. Serializing Objects to JSON</h2>
+
+  <pre><code>
+public class JsonSerialization {
+    
+    public static void example() {
+        // Create objects
+        Account acc = new Account(Name = 'Acme Corp', Phone = '555-1234');
+        
+        // Serialize to JSON
+        String json = JSON.serialize(acc);
+        System.debug(json);
+        // Output: {"attributes":{"type":"Account"},"Name":"Acme Corp","Phone":"555-1234"}
+        
+        // Serialize with options
+        String json2 = JSON.serializePretty(acc);  // Pretty print
+        
+        // Serialize custom wrapper
+        AccountWrapper wrapper = new AccountWrapper(acc);
+        String json3 = JSON.serialize(wrapper);
+    }
+}
+  </code></pre>
+
+  <h2>7. Real-World Example: Salesforce REST API</h2>
+
+  <pre><code>
+public class SalesforceRESTClient {
+    
+    public class SalesforceRecord {
+        public String Id;
+        public String Name;
+        public Map&lt;String, Object&gt; fields;
+    }
+    
+    public static SalesforceRecord getRecord(String sObjectType, String recordId) {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        
+        String endpoint = 'callout:Salesforce_Instance/services/data/v57.0/sobjects/' + 
+                          sObjectType + '/' + recordId;
+        
+        request.setEndpoint(endpoint);
+        request.setMethod('GET');
+        request.setHeader('Authorization', 'Bearer ' + getAccessToken());
+        
+        HttpResponse response = http.send(request);
+        
+        if (response.getStatusCode() == 200) {
+            Map&lt;String, Object&gt; record = (Map&lt;String, Object&gt;) JSON.deserializeUntyped(response.getBody());
+            
+            SalesforceRecord result = new SalesforceRecord();
+            result.Id = (String) record.get('Id');
+            result.Name = (String) record.get('Name');
+            result.fields = record;
+            
+            return result;
+        }
+        return null;
+    }
+    
+    private static String getAccessToken() {
+        // Implementation to get access token
+        return 'your_token';
+    }
+}
+  </code></pre>
+
+  <h2>8. Error Handling with JSON</h2>
+
+  <pre><code>
+public class JsonErrorHandling {
+    
+    public static void parseWithErrorHandling(String jsonString) {
+        try {
+            Map&lt;String, Object&gt; data = (Map&lt;String, Object&gt;) JSON.deserializeUntyped(jsonString);
+            System.debug('Parsed successfully: ' + data);
+        } catch (JSONException e) {
+            System.debug('Invalid JSON: ' + e.getMessage());
+        } catch (Exception e) {
+            System.debug('Unexpected error: ' + e.getMessage());
+        }
+    }
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use wrapper classes to structure API requests and responses</li>
+    <li>Use <code>JSON.serialize()</code> to convert objects to JSON</li>
+    <li>Use <code>JSON.deserialize()</code> to convert JSON to objects</li>
+    <li>Handle special field names using constructors or manual mapping</li>
+    <li>Always wrap API calls in try/catch for JSONException</li>
+    <li>Test JSON parsing with real API responses</li>
+    <li>Use <code>@AuraEnabled</code> annotation for field mapping</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

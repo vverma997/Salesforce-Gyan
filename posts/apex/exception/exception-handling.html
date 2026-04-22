@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Exception Handling in Apex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Exception Handling in Apex – try/catch, Custom Exceptions</h1>
+
+  <p>
+    Proper exception handling is crucial for building robust, maintainable Apex code. This guide covers try/catch blocks, custom exceptions, and best practices.
+  </p>
+
+  <h2>1. Basic try/catch Structure</h2>
+
+  <pre><code>
+public class AccountService {
+    public static void updateAccounts(List&lt;Account&gt; accounts) {
+        try {
+            // Code that might throw an exception
+            update accounts;
+            System.debug('Accounts updated successfully');
+        } catch (DmlException e) {
+            // Handle the specific exception
+            System.debug('DML Error: ' + e.getMessage());
+            System.debug('Failure message: ' + e.getDmlMessage(0));
+            System.debug('Failed record ID: ' + e.getDmlId(0));
+        } catch (Exception e) {
+            // Catch-all for other exceptions
+            System.debug('Unexpected error: ' + e.getMessage());
+        } finally {
+            // Cleanup code - runs regardless of exception
+            System.debug('Operation complete');
+        }
+    }
+}
+  </code></pre>
+
+  <h2>2. Common Exception Types</h2>
+
+  <h3>DmlException (Database Exceptions)</h3>
+  <pre><code>
+try {
+    List&lt;Account&gt; accounts = new List&lt;Account&gt;{
+        new Account(Name = 'Test')  // Missing required field
+    };
+    insert accounts;
+} catch (DmlException e) {
+    // Specific DML errors
+    System.debug('Error type: ' + e.getDmlType(0));  // REQUIRED_FIELD_MISSING
+    System.debug('Error message: ' + e.getDmlMessage(0));
+    
+    // Which record failed?
+    String failedId = e.getDmlId(0);
+}
+  </code></pre>
+
+  <h3>QueryException</h3>
+  <pre><code>
+try {
+    Account acc = [SELECT Id FROM Account WHERE Name = 'NonExistent'];
+} catch (QueryException e) {
+    // Thrown when query returns no rows or too many rows
+    System.debug('Query failed: ' + e.getMessage());
+}
+  </code></pre>
+
+  <h3>NullPointerException</h3>
+  <pre><code>
+try {
+    String name = null;
+    Integer length = name.length();  // Null reference
+} catch (NullPointerException e) {
+    System.debug('Null value encountered');
+}
+  </code></pre>
+
+  <h3>CalloutException (API Calls)</h3>
+  <pre><code>
+try {
+    Http http = new Http();
+    HttpRequest request = new HttpRequest();
+    request.setEndpoint('https://api.example.com');
+    request.setMethod('GET');
+    request.setTimeout(120000);
+    
+    HttpResponse response = http.send(request);
+} catch (CalloutException e) {
+    // Timeout or other callout errors
+    System.debug('Callout failed: ' + e.getMessage());
+}
+  </code></pre>
+
+  <h2>3. Creating Custom Exceptions</h2>
+
+  <p>
+    Create custom exceptions for application-specific errors:
+  </p>
+
+  <pre><code>
+// Define custom exception
+public class InsufficientFundsException extends Exception { }
+
+public class PaymentProcessor {
+    public static void processPayment(Account acc, Decimal amount) {
+        if (amount &gt; acc.Balance__c) {
+            throw new InsufficientFundsException('Account balance too low');
+        }
+        
+        // Process payment
+        acc.Balance__c -= amount;
+        update acc;
+    }
+}
+
+// Handle custom exception
+try {
+    PaymentProcessor.processPayment(myAccount, 5000);
+} catch (InsufficientFundsException e) {
+    System.debug('Payment rejected: ' + e.getMessage());
+    ShowUserMessage('Your account balance is insufficient');
+} catch (Exception e) {
+    System.debug('Unexpected error: ' + e.getMessage());
+}
+  </code></pre>
+
+  <h2>4. Custom Exception with Additional Context</h2>
+
+  <pre><code>
+public class ValidationException extends Exception {
+    public List&lt;String&gt; errors { get; set; }
+    
+    public ValidationException(List&lt;String&gt; errorList) {
+        this.errors = errorList;
+        this.setMessage('Validation failed: ' + String.join(errorList, ', '));
+    }
+}
+
+public class AccountValidator {
+    public static void validateAccount(Account acc) {
+        List&lt;String&gt; errors = new List&lt;String&gt;();
+        
+        if (String.isBlank(acc.Name)) {
+            errors.add('Account name is required');
+        }
+        if (acc.Revenue__c &lt; 0) {
+            errors.add('Revenue cannot be negative');
+        }
+        if (String.isBlank(acc.Industry)) {
+            errors.add('Industry is required');
+        }
+        
+        if (!errors.isEmpty()) {
+            throw new ValidationException(errors);
+        }
+    }
+}
+
+// Usage
+try {
+    AccountValidator.validateAccount(myAccount);
+} catch (ValidationException e) {
+    System.debug('Validation errors:');
+    for (String err : e.errors) {
+        System.debug('  - ' + err);
+    }
+}
+  </code></pre>
+
+  <h2>5. Exception Handling Best Practices</h2>
+
+  <h3>Don't Silently Ignore Exceptions</h3>
+  <pre><code>
+// ❌ BAD - Swallows all errors
+try {
+    update accounts;
+} catch (Exception e) {
+    // Silent catch - error is lost!
+}
+
+// ✅ GOOD - Log or handle properly
+try {
+    update accounts;
+} catch (DmlException e) {
+    System.debug('DML Error: ' + e.getMessage());
+    logErrorToCustomObject(e);
+    throw e;  // Or re-throw if critical
+}
+  </code></pre>
+
+  <h3>Be Specific About Exception Types</h3>
+  <pre><code>
+// ❌ BAD - Catch-all hides real problems
+try {
+    insert accounts;
+    update opportunities;
+} catch (Exception e) {
+    System.debug('Error: ' + e.getMessage());
+}
+
+// ✅ GOOD - Specific handling
+try {
+    insert accounts;
+} catch (DmlException e) {
+    handleDmlError(e);
+}
+
+try {
+    update opportunities;
+} catch (DmlException e) {
+    handleDmlError(e);
+}
+  </code></pre>
+
+  <h3>Use finally for Cleanup</h3>
+  <pre><code>
+public static void processLargeDataset() {
+    try {
+        // Expensive operation
+    } catch (Exception e) {
+        System.debug('Error: ' + e.getMessage());
+    } finally {
+        // Always runs - cleanup here
+        cleanupResources();
+    }
+}
+  </code></pre>
+
+  <h2>6. Logging Exceptions</h2>
+
+  <p>
+    Always log exceptions for debugging and monitoring:
+  </p>
+
+  <pre><code>
+public class ErrorLogger {
+    public static void logException(Exception e, String context) {
+        Error_Log__c errorLog = new Error_Log__c(
+            Exception_Type__c = e.getTypeName(),
+            Exception_Message__c = e.getMessage(),
+            Stack_Trace__c = e.getStackTraceString(),
+            Context__c = context,
+            User__c = UserInfo.getUserId(),
+            Timestamp__c = Datetime.now()
+        );
+        insert errorLog;
+    }
+}
+
+// Usage
+try {
+    update accounts;
+} catch (DmlException e) {
+    ErrorLogger.logException(e, 'AccountService.updateAccounts');
+}
+  </code></pre>
+
+  <h2>7. Re-throwing Exceptions</h2>
+
+  <pre><code>
+public static void processOrder(Order order) {
+    try {
+        validateOrder(order);
+        update order;
+    } catch (ValidationException e) {
+        // Handle validation specifically
+        System.debug('Validation failed: ' + e.getMessage());
+        throw e;  // Re-throw to caller
+    } catch (Exception e) {
+        // Log unexpected errors
+        System.debug('Unexpected error: ' + e.getMessage());
+        throw new ProcessingException('Order processing failed');
+    }
+}
+
+public class ProcessingException extends Exception { }
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Always use try/catch around potentially failing code</li>
+    <li>Be specific about exception types (DmlException, QueryException, etc.)</li>
+    <li>Create custom exceptions for application-specific errors</li>
+    <li>Log all exceptions for debugging</li>
+    <li>Don't silently catch and ignore exceptions</li>
+    <li>Use finally for cleanup operations</li>
+    <li>Re-throw exceptions if the caller needs to handle them</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

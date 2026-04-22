@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Forms & Validation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>LWC Forms & Validation</h1>
+
+  <p>
+    Building forms in LWC requires handling input, validation, and error display. Learn best practices for creating robust, user-friendly forms.
+  </p>
+
+  <h2>1. Basic Form Structure</h2>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;div class="container"&gt;
+        &lt;h2&gt;Account Form&lt;/h2&gt;
+
+        &lt;form onsubmit={handleSubmit}&gt;
+            &lt;div class="form-group"&gt;
+                &lt;label for="accountName"&gt;Account Name&lt;/label&gt;
+                &lt;input 
+                    id="accountName"
+                    type="text" 
+                    value={formData.name}
+                    onchange={handleInputChange}
+                    data-field="name"
+                    required&gt;
+                &lt;span if:true={errors.name} class="error"&gt;
+                    {errors.name}
+                &lt;/span&gt;
+            &lt;/div&gt;
+
+            &lt;div class="form-group"&gt;
+                &lt;label for="accountPhone"&gt;Phone&lt;/label&gt;
+                &lt;input 
+                    id="accountPhone"
+                    type="tel" 
+                    value={formData.phone}
+                    onchange={handleInputChange}
+                    data-field="phone"&gt;
+            &lt;/div&gt;
+
+            &lt;div class="form-actions"&gt;
+                &lt;button type="submit" class="btn-primary"&gt;Save&lt;/button&gt;
+                &lt;button type="button" onclick={handleCancel}&gt;Cancel&lt;/button&gt;
+            &lt;/div&gt;
+
+            &lt;div if:true={successMessage} class="success"&gt;
+                {successMessage}
+            &lt;/div&gt;
+
+            &lt;div if:true={generalError} class="error"&gt;
+                {generalError}
+            &lt;/div&gt;
+        &lt;/form&gt;
+    &lt;/div&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>2. Form Data Binding</h2>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+
+export default class AccountForm extends LightningElement {
+    @track formData = {
+        name: '',
+        phone: '',
+        website: '',
+        industry: ''
+    };
+
+    @track errors = {};
+    @track successMessage = '';
+    @track generalError = '';
+
+    handleInputChange(event) {
+        const field = event.target.dataset.field;
+        const value = event.target.value;
+
+        // Update formData
+        this.formData = { ...this.formData, [field]: value };
+
+        // Clear error for this field on change
+        if (this.errors[field]) {
+            this.errors = { ...this.errors, [field]: '' };
+        }
+    }
+
+    handleSubmit(event) {
+        event.preventDefault();
+
+        // Validate form
+        if (!this.validateForm()) {
+            return;
+        }
+
+        // Submit form
+        this.submitForm();
+    }
+
+    validateForm() {
+        const errors = {};
+
+        if (!this.formData.name || this.formData.name.trim() === '') {
+            errors.name = 'Account name is required';
+        }
+
+        if (!this.formData.industry) {
+            errors.industry = 'Industry is required';
+        }
+
+        if (this.formData.phone && !this.isValidPhone(this.formData.phone)) {
+            errors.phone = 'Phone number is invalid';
+        }
+
+        this.errors = errors;
+        return Object.keys(errors).length === 0;
+    }
+
+    isValidPhone(phone) {
+        const phoneRegex = /^[\d\s\-()]+$/;
+        return phoneRegex.test(phone) && phone.length >= 10;
+    }
+
+    async submitForm() {
+        try {
+            // Call Apex to save account
+            const result = await createAccount({ 
+                accountData: this.formData 
+            });
+
+            this.successMessage = 'Account saved successfully!';
+            this.formData = { name: '', phone: '', website: '', industry: '' };
+
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                this.successMessage = '';
+            }, 3000);
+        } catch (error) {
+            this.generalError = error.body.message;
+        }
+    }
+
+    handleCancel() {
+        this.formData = { name: '', phone: '', website: '', industry: '' };
+        this.errors = {};
+        this.successMessage = '';
+        this.generalError = '';
+    }
+}
+  </code></pre>
+
+  <h2>3. Using Lightning Components for Forms</h2>
+
+  <p>
+    Salesforce provides built-in Lightning components for forms:
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-card title="Account Form"&gt;
+        &lt;div class="slds-box"&gt;
+            &lt;lightning-input 
+                label="Account Name" 
+                type="text"
+                value={formData.name}
+                onchange={handleInputChange}
+                data-field="name"
+                required&gt;
+            &lt;/lightning-input&gt;
+
+            &lt;lightning-input 
+                label="Phone" 
+                type="tel"
+                value={formData.phone}
+                onchange={handleInputChange}
+                data-field="phone"&gt;
+            &lt;/lightning-input&gt;
+
+            &lt;lightning-textarea
+                label="Description"
+                value={formData.description}
+                onchange={handleInputChange}
+                data-field="description"&gt;
+            &lt;/lightning-textarea&gt;
+
+            &lt;lightning-combobox
+                label="Industry"
+                value={formData.industry}
+                options={industryOptions}
+                onchange={handleDropdownChange}
+                data-field="industry"&gt;
+            &lt;/lightning-combobox&gt;
+
+            &lt;div class="slds-var-m-top_medium"&gt;
+                &lt;lightning-button 
+                    variant="brand"
+                    label="Save" 
+                    onclick={handleSubmit}&gt;
+                &lt;/lightning-button&gt;
+                
+                &lt;lightning-button 
+                    label="Cancel" 
+                    onclick={handleCancel}&gt;
+                &lt;/lightning-button&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>4. Real-time Validation</h2>
+
+  <pre><code>
+export default class AccountForm extends LightningElement {
+    @track email = '';
+    @track emailError = '';
+
+    handleEmailChange(event) {
+        this.email = event.target.value;
+        this.validateEmail();
+    }
+
+    validateEmail() {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!this.email) {
+            this.emailError = '';
+        } else if (!emailRegex.test(this.email)) {
+            this.emailError = 'Please enter a valid email address';
+        } else {
+            this.emailError = '';
+        }
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-input 
+        label="Email" 
+        type="email"
+        value={email}
+        onchange={handleEmailChange}
+        message-when-bad={emailError}
+        status={emailStatus}&gt;
+    &lt;/lightning-input&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>5. File Upload</h2>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;form onsubmit={handleUpload}&gt;
+        &lt;input 
+            type="file" 
+            accept=".csv,.xlsx"
+            onchange={handleFileSelect}&gt;
+
+        &lt;span if:true={fileName}&gt;
+            Selected file: {fileName}
+        &lt;/span&gt;
+
+        &lt;button type="submit" disabled={isSubmitting}&gt;
+            Upload
+        &lt;/button&gt;
+    &lt;/form&gt;
+&lt;/template&gt;
+
+export default class FileUpload extends LightningElement {
+    @track fileName = '';
+    @track isSubmitting = false;
+    selectedFile;
+
+    handleFileSelect(event) {
+        this.selectedFile = event.target.files[0];
+        this.fileName = this.selectedFile.name;
+    }
+
+    async handleUpload(event) {
+        event.preventDefault();
+
+        if (!this.selectedFile) {
+            return;
+        }
+
+        this.isSubmitting = true;
+
+        try {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const fileContent = e.target.result;
+                await uploadFile({ 
+                    fileName: this.fileName,
+                    fileContent: fileContent
+                });
+            };
+            reader.readAsArrayBuffer(this.selectedFile);
+        } catch (error) {
+            console.error('Upload failed:', error);
+        } finally {
+            this.isSubmitting = false;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>6. Form Validation Patterns</h2>
+
+  <h3>Password Strength Validator</h3>
+  <pre><code>
+validatePasswordStrength(password) {
+    const rules = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        numbers: /\d/.test(password),
+        special: /[!@#$%^&*]/.test(password)
+    };
+
+    const strength = Object.values(rules).filter(Boolean).length;
+
+    return {
+        rules,
+        strength,
+        label: strength === 5 ? 'Strong' : strength >= 3 ? 'Medium' : 'Weak'
+    };
+}
+  </code></pre>
+
+  <h3>Cross-Field Validation</h3>
+  <pre><code>
+validateDates() {
+    if (this.startDate && this.endDate) {
+        if (new Date(this.startDate) > new Date(this.endDate)) {
+            this.errors.endDate = 'End date must be after start date';
+            return false;
+        }
+    }
+    return true;
+}
+
+validatePasswords() {
+    if (this.password !== this.confirmPassword) {
+        this.errors.confirmPassword = 'Passwords do not match';
+        return false;
+    }
+    return true;
+}
+  </code></pre>
+
+  <h2>7. Error Display Best Practices</h2>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;div class="form-group"&gt;
+        &lt;label&gt;Email&lt;/label&gt;
+        &lt;input 
+            type="email"
+            value={email}
+            onchange={handleEmailChange}
+            class={inputClass}&gt;
+        
+        &lt;div if:true={emailError} class="error-message"&gt;
+            &lt;svg viewBox="0 0 24 24" width="16" height="16"&gt;
+                &lt;!-- Error icon --&gt;
+            &lt;/svg&gt;
+            &lt;span&gt;{emailError}&lt;/span&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/template&gt;
+
+export default class EmailInput extends LightningElement {
+    @track email = '';
+    @track emailError = '';
+
+    get inputClass() {
+        return this.emailError ? 'input error' : 'input';
+    }
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use @track for form data and errors</li>
+    <li>Validate on submit and in real-time</li>
+    <li>Clear errors when user starts correcting</li>
+    <li>Use Lightning components for consistent UI</li>
+    <li>Show success/error feedback clearly</li>
+    <li>Disable submit button while processing</li>
+    <li>Handle file uploads with FileReader API</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

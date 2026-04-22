@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Styling & CSS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>SLDS Styling in LWC – Clean UI Practices</h1>
+
+  <p>
+    LWC uses Shadow DOM for encapsulation, but SLDS remains the recommended styling approach for clean Salesforce UI. Learn how to build polished, consistent component layouts.
+  </p>
+
+  <h2>1. Component CSS Files</h2>
+
+  <p>
+    Each LWC component has its own CSS file. Styles are automatically scoped to that component.
+  </p>
+
+  <h3>Component Structure</h3>
+  <pre><code>
+myComponent/
+  myComponent.html
+  myComponent.js
+  myComponent.css
+  </code></pre>
+
+  <h3>CSS File</h3>
+  <pre><code>
+/* myComponent.css */
+.button-primary {
+    background-color: #0076d6;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.button-primary:hover {
+    background-color: #004a9e;
+}
+
+.card {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.card-body {
+    font-size: 14px;
+    color: #333;
+}
+  </code></pre>
+
+  <h3>HTML Using Styles</h3>
+  <pre><code>
+&lt;template&gt;
+    &lt;div class="card"&gt;
+        &lt;h3 class="card-title"&gt;Account Details&lt;/h3&gt;
+        &lt;div class="card-body"&gt;
+            &lt;p&gt;Name: {account.Name}&lt;/p&gt;
+            &lt;p&gt;Phone: {account.Phone}&lt;/p&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    
+    &lt;button class="button-primary" onclick={handleClick}&gt;
+        Save
+    &lt;/button&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>2. Shadow DOM Encapsulation</h2>
+
+  <p>
+    CSS inside a component doesn't affect parent/sibling components, and vice versa.
+  </p>
+
+  <h3>✅ Benefits of Encapsulation</h3>
+  <ul>
+    <li>No CSS conflicts between components</li>
+    <li>Portable components – reusable anywhere</li>
+    <li>Safe to use utility CSS in parent</li>
+    <li>Clear separation of concerns</li>
+  </ul>
+
+  <pre><code>
+/* Parent component CSS - doesn't affect child */
+.card {
+    border: 3px solid red;
+}
+
+&lt;template&gt;
+    &lt;c-child-component&gt;&lt;/c-child-component&gt;
+&lt;/template&gt;
+
+/* Child component CSS - stays scoped */
+.card {
+    border: 1px solid blue;  /* This takes precedence in child */
+}
+  </code></pre>
+
+  <h2>3. Using Lightning Design System (SLDS)</h2>
+
+  <p>
+    LWC integrates with SLDS for consistent Salesforce styling:
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;div class="slds-box slds-var-m-around_medium"&gt;
+        &lt;h2 class="slds-var-text-heading_large"&gt;Account&lt;/h2&gt;
+        
+        &lt;div class="slds-form"&gt;
+            &lt;div class="slds-form-element"&gt;
+                &lt;label class="slds-form-element__label"&gt;Name&lt;/label&gt;
+                &lt;div class="slds-form-element__control"&gt;
+                    &lt;input type="text" class="slds-input" /&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;button class="slds-button slds-button_brand"&gt;
+            Save
+        &lt;/button&gt;
+    &lt;/div&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>4. Dynamic Styling</h2>
+
+  <h3>Conditional Classes</h3>
+  <pre><code>
+&lt;template&gt;
+    &lt;button 
+        class={buttonClass}
+        onclick={handleClick}&gt;
+        Click me
+    &lt;/button&gt;
+&lt;/template&gt;
+
+// JavaScript
+export default class ButtonComponent extends LightningElement {
+    isActive = false;
+
+    get buttonClass() {
+        return this.isActive ? 'slds-button slds-button_brand' : 'slds-button';
+    }
+
+    handleClick() {
+        this.isActive = !this.isActive;
+    }
+}
+  </code></pre>
+
+  <h3>Inline Styles</h3>
+  <pre><code>
+&lt;template&gt;
+    &lt;div style={boxStyle}&gt;
+        Dynamic styled content
+    &lt;/div&gt;
+&lt;/template&gt;
+
+export default class DynamicStyleComponent extends LightningElement {
+    backgroundColor = '#f5f5f5';
+    padding = '20px';
+
+    get boxStyle() {
+        return `background-color: ${this.backgroundColor}; padding: ${this.padding};`;
+    }
+}
+  </code></pre>
+
+  <h2>5. Communicating with Parent Styles</h2>
+
+  <p>
+    Use CSS custom properties to allow parents to style children:
+  </p>
+
+  <h3>Child Component</h3>
+  <pre><code>
+/* childComponent.css */
+.container {
+    background-color: var(--container-bg, white);
+    color: var(--container-color, black);
+    padding: var(--container-padding, 10px);
+}
+  </code></pre>
+
+  <h3>Parent Component</h3>
+  <pre><code>
+/* parentComponent.css */
+c-child-component {
+    --container-bg: #e8f4f8;
+    --container-color: #003366;
+    --container-padding: 20px;
+}
+  </code></pre>
+
+  <h2>6. Styling Best Practices</h2>
+
+  <h3>Use SLDS Variables</h3>
+  <pre><code>
+/* Good - use SLDS spacing */
+.card {
+    padding: var(--lwc-spacing_medium);  /* 1rem */
+    margin-bottom: var(--lwc-spacing_large);  /* 1.5rem */
+}
+
+.title {
+    font-size: var(--lwc-fontSize_heading_large);
+    color: var(--lwc-colorTextDefault);
+}
+  </code></pre>
+
+  <h3>Avoid Deep Styling</h3>
+  <pre><code>
+/* ❌ Don't try to style child components from parent */
+.child-component .card {
+    /* This won't work due to Shadow DOM */
+}
+
+/* ✅ Pass CSS variables instead */
+.parent {
+    --card-border: 2px solid red;
+}
+
+/* In child component CSS */
+.card {
+    border: var(--card-border, 1px solid gray);
+}
+  </code></pre>
+
+  <h2>7. Responsive Design</h2>
+
+  <pre><code>
+/* Component CSS */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.card {
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+}
+
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card {
+        padding: 15px;
+    }
+}
+  </code></pre>
+
+  <h2>8. Common Styling Patterns</h2>
+
+  <h3>Flex Layout</h3>
+  <pre><code>
+.container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar {
+    flex: 0 0 250px;  /* Fixed width */
+}
+
+.content {
+    flex: 1;  /* Take remaining space */
+}
+  </code></pre>
+
+  <h3>Grid Layout</h3>
+  <pre><code>
+.form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.form-row {
+    grid-column: span 2;  /* Full width */
+}
+
+@media (max-width: 768px) {
+    .form {
+        grid-template-columns: 1fr;
+    }
+
+    .form-row {
+        grid-column: span 1;
+    }
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>CSS files are automatically scoped to components (Shadow DOM)</li>
+    <li>Use SLDS classes for consistent Salesforce styling</li>
+    <li>Use CSS variables to customize child components from parent</li>
+    <li>Avoid trying to deeply style child components</li>
+    <li>Use dynamic classes with getters for conditional styling</li>
+    <li>Mobile-first responsive design with media queries</li>
+    <li>Leverage SLDS variables for colors, spacing, and fonts</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trigger Recursion Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trigger Recursion Control</h1>
+
+  <p>
+    One of the common problems in Apex triggers is accidental recursion.
+    That happens when a trigger causes an update, and the same trigger runs again.
+  </p>
+
+  <h2>Why recursion is bad</h2>
+
+  <p>
+    Uncontrolled recursion can lead to infinite loops, repeated DML operations, and hitting governor limits.
+    The safe fix is to add a guard so each trigger only runs once per transaction.
+  </p>
+
+  <h2>Use a static helper variable</h2>
+
+  <p>
+    Static variables keep state for the transaction, so you can detect whether your trigger already ran.
+  </p>
+
+  <pre><code>
+public class OpportunityTriggerHelper {
+    public static Boolean hasRun = false;
+}
+
+trigger OpportunityTrigger on Opportunity (before update) {
+    if (OpportunityTriggerHelper.hasRun) {
+        return;
+    }
+
+    OpportunityTriggerHelper.hasRun = true;
+
+    for (Opportunity opp : Trigger.new) {
+        if (opp.StageName == 'Closed Won') {
+            opp.Description = 'Closed this deal';
+        }
+    }
+}
+  </code></pre>
+
+  <h2>Better: use a reusable guard method</h2>
+
+  <p>
+    A small helper class makes recursion control easier to reuse across multiple triggers.
+  </p>
+
+  <pre><code>
+public class TriggerExecutionGuard {
+    private static Set<String> executedTriggers = new Set<String>();
+
+    public static Boolean canRun(String triggerName) {
+        if (executedTriggers.contains(triggerName)) {
+            return false;
+        }
+        executedTriggers.add(triggerName);
+        return true;
+    }
+}
+
+trigger AccountTrigger on Account (before update) {
+    if (!TriggerExecutionGuard.canRun('AccountTrigger')) {
+        return;
+    }
+
+    // trigger logic here
+}
+  </code></pre>
+
+  <h2>When you still need recursive updates</h2>
+
+  <p>
+    Sometimes a trigger must update a related record, and that related record has its own trigger.
+    In those cases, design the triggers so they can safely run multiple times without repeating work.
+  </p>
+
+  <h2>Key rule</h2>
+
+  <ul>
+    <li>Use static guards for transaction-level recursion control</li>
+    <li>Keep trigger logic idempotent when possible</li>
+    <li>Prefer handler methods that can skip work if it already happened</li>
+  </ul>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

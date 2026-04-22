@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trigger Handler Pattern</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trigger Handler Pattern</h1>
+
+  <p>
+    A trigger handler pattern separates trigger entry points from the business logic.
+    This improves maintainability and helps you keep logic testable.
+  </p>
+
+  <h2>Typical trigger body</h2>
+
+  <pre><code>
+trigger LeadTrigger on Lead (before insert, before update, after update) {
+    LeadTriggerHandler.handle(Trigger.new, Trigger.oldMap, Trigger.operationType);
+}
+  </code></pre>
+
+  <h2>Handler structure</h2>
+
+  <p>
+    The handler class decides what to do based on the context and keeps the trigger page clean.
+  </p>
+
+  <pre><code>
+public class LeadTriggerHandler {
+    public static void handle(List<Lead> newList, Map<Id, Lead> oldMap, System.TriggerOperation operation) {
+        if (Trigger.isBefore) {
+            if (Trigger.isInsert) {
+                beforeInsert(newList);
+            } else if (Trigger.isUpdate) {
+                beforeUpdate(newList, oldMap);
+            }
+        }
+
+        if (Trigger.isAfter && Trigger.isUpdate) {
+            afterUpdate(newList, oldMap);
+        }
+    }
+
+    private static void beforeInsert(List<Lead> leads) {
+        // validation or defaulting logic
+    }
+
+    private static void beforeUpdate(List<Lead> leads, Map<Id, Lead> oldMap) {
+        // detect changes and prevent bad updates
+    }
+
+    private static void afterUpdate(List<Lead> leads, Map<Id, Lead> oldMap) {
+        // perform related updates or notifications
+    }
+}
+  </code></pre>
+
+  <h2>Why this helps</h2>
+
+  <ul>
+    <li>Triggers stay small and readable</li>
+    <li>Logic can be shared and reused</li>
+    <li>Tests can target handler methods directly</li>
+  </ul>
+
+  <h2>Tip</h2>
+
+  <p>
+    Keep the handler class focused on trigger behavior. Move unrelated business rules into service classes when possible.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

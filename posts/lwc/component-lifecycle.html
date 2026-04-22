@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Component Lifecycle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>LWC Lifecycle Hooks – connectedCallback & renderedCallback</h1>
+
+  <p>
+    Understanding LWC lifecycle hooks helps you manage initialization and DOM interactions safely. This post focuses on connectedCallback, renderedCallback, and related lifecycle stages.
+  </p>
+
+  <h2>1. Component Lifecycle Stages</h2>
+
+  <p>
+    The LWC lifecycle follows this order:
+  </p>
+
+  <ol>
+    <li><strong>constructor()</strong> – Component instance created</li>
+    <li><strong>connectedCallback()</strong> – Component inserted into DOM</li>
+    <li><strong>renderedCallback()</strong> – Component rendered to DOM</li>
+    <li><strong>disconnectedCallback()</strong> – Component removed from DOM</li>
+  </ol>
+
+  <h2>2. Constructor</h2>
+
+  <p>
+    Called when the component is first created. Use it for initializing properties.
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+
+export default class MyComponent extends LightningElement {
+    @track value = '';
+    @track loading = false;
+
+    constructor() {
+        super();
+        
+        // Initialize properties
+        this.value = 'Default Value';
+        this.loading = false;
+        
+        console.log('Constructor called');
+    }
+}
+  </code></pre>
+
+  <h3>⚠️ Constructor Limitations:</h3>
+  <ul>
+    <li>Cannot use @wire or @api properties yet</li>
+    <li>Cannot access template or DOM</li>
+    <li>Cannot dispatch events</li>
+    <li>Cannot call helper methods that depend on properties</li>
+  </ul>
+
+  <h2>3. connectedCallback()</h2>
+
+  <p>
+    Called when the component is inserted into the DOM. This is where you initialize data, set up listeners, and fetch data.
+  </p>
+
+  <pre><code>
+import { LightningElement, track, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class MyComponent extends LightningElement {
+    @track accounts;
+    listener;
+
+    connectedCallback() {
+        console.log('connectedCallback called');
+        
+        // Initialize data
+        this.loadAccounts();
+        
+        // Set up event listeners
+        window.addEventListener('scroll', this.handleScroll);
+        
+        // Subscribe to events
+        this.subscribeToMessages();
+    }
+
+    loadAccounts() {
+        // Fetch data
+        getAccounts()
+            .then(data => {
+                this.accounts = data;
+            })
+            .catch(error => {
+                console.error('Error loading accounts:', error);
+            });
+    }
+
+    handleScroll() {
+        console.log('Page scrolled');
+    }
+
+    subscribeToMessages() {
+        // Subscribe to message channel
+    }
+}
+  </code></pre>
+
+  <h2>4. renderedCallback()</h2>
+
+  <p>
+    Called after the component finishes rendering. Use it for DOM manipulation and accessing DOM elements.
+  </p>
+
+  <pre><code>
+export default class MyComponent extends LightningElement {
+    @track data = [];
+
+    renderedCallback() {
+        console.log('renderedCallback called');
+        
+        // Access DOM elements
+        const element = this.template.querySelector('.my-element');
+        if (element) {
+            element.classList.add('active');
+        }
+        
+        // Initialize third-party libraries
+        this.initializeChart();
+        
+        // Set focus
+        const input = this.template.querySelector('input');
+        if (input) {
+            input.focus();
+        }
+    }
+
+    initializeChart() {
+        // Initialize Chart.js or similar library
+        const canvas = this.template.querySelector('canvas');
+        if (canvas) {
+            // Chart initialization code
+        }
+    }
+}
+  </code></pre>
+
+  <h3>⚠️ renderedCallback Warnings:</h3>
+  <ul>
+    <li>Called multiple times – guard against duplicate work</li>
+    <li>Don't modify state in renderedCallback (causes infinite loops)</li>
+    <li>Use for DOM effects only, not data updates</li>
+  </ul>
+
+  <pre><code>
+export default class SafeComponent extends LightningElement {
+    @track initialized = false;
+
+    renderedCallback() {
+        // Guard against multiple calls
+        if (this.initialized) {
+            return;
+        }
+        
+        this.initialized = true;
+        
+        // Safe DOM manipulation
+        this.setupDOM();
+    }
+
+    setupDOM() {
+        const button = this.template.querySelector('button');
+        if (button) {
+            button.addEventListener('click', this.handleClick);
+        }
+    }
+}
+  </code></pre>
+
+  <h2>5. disconnectedCallback()</h2>
+
+  <p>
+    Called when the component is removed from the DOM. Clean up resources and listeners.
+  </p>
+
+  <pre><code>
+export default class MyComponent extends LightningElement {
+    scrollHandler = this.handleScroll.bind(this);
+
+    connectedCallback() {
+        // Add listener
+        window.addEventListener('scroll', this.scrollHandler);
+    }
+
+    disconnectedCallback() {
+        console.log('disconnectedCallback called');
+        
+        // Remove event listeners
+        window.removeEventListener('scroll', this.scrollHandler);
+        
+        // Unsubscribe from message channels
+        this.unsubscribeFromMessages();
+        
+        // Cancel pending requests
+        this.cancelPendingRequests();
+        
+        // Clear timers
+        if (this.timer) {
+            clearTimeout(this.timer);
+        }
+    }
+
+    unsubscribeFromMessages() {
+        // Cleanup subscription
+    }
+
+    cancelPendingRequests() {
+        // Cancel any pending API calls
+    }
+}
+  </code></pre>
+
+  <h2>6. Lifecycle Examples in Action</h2>
+
+  <h3>Example: Data Table Component</h3>
+  <pre><code>
+import { LightningElement, track, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class DataTableComponent extends LightningElement {
+    @track accounts = [];
+    @track loading = false;
+    @track error;
+    
+    pageSize = 10;
+    currentPage = 1;
+    sortField = 'Name';
+
+    constructor() {
+        super();
+        console.log('[1] Constructor');
+    }
+
+    connectedCallback() {
+        console.log('[2] connectedCallback');
+        this.loadAccounts();
+    }
+
+    async loadAccounts() {
+        this.loading = true;
+        try {
+            const data = await getAccounts();
+            this.accounts = data;
+            this.error = undefined;
+        } catch (error) {
+            this.error = error.body.message;
+        } finally {
+            this.loading = false;
+        }
+    }
+
+    renderedCallback() {
+        console.log('[3] renderedCallback');
+        
+        // Setup sorting
+        const headers = this.template.querySelectorAll('th');
+        headers.forEach(header => {
+            header.addEventListener('click', (e) => {
+                this.sortField = e.target.dataset.field;
+                // Re-sort data
+            });
+        });
+    }
+
+    disconnectedCallback() {
+        console.log('[4] disconnectedCallback');
+        // Clean up
+    }
+}
+  </code></pre>
+
+  <h2>7. Lifecycle with @api Properties</h2>
+
+  <p>
+    Parent updates to @api properties trigger lifecycle hooks in child:
+  </p>
+
+  <pre><code>
+// Child component
+export default class ChildComponent extends LightningElement {
+    @api recordId;
+    @track record;
+
+    connectedCallback() {
+        if (this.recordId) {
+            this.loadRecord();
+        }
+    }
+
+    loadRecord() {
+        // Fetch record data
+    }
+}
+
+// Parent component
+export default class ParentComponent extends LightningElement {
+    @track selectedId = '001';
+
+    handleSelect(event) {
+        this.selectedId = event.target.value;
+        // Child's renderedCallback fires after parent updates dom
+    }
+}
+  </code></pre>
+
+  <h2>8. Lifecycle Hooks Timing</h2>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ccc; padding: 10px;">Lifecycle Hook</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">When Called</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Can Access DOM?</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Can Update State?</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">constructor</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Instantiation</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">connectedCallback</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Inserted to DOM</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ Limited</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">renderedCallback</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">After rendering</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No (risk of loops)</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">disconnectedCallback</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">Removed from DOM</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+    </tr>
+  </table>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li><strong>constructor</strong> – Initialize properties only</li>
+    <li><strong>connectedCallback</strong> – Load data, setup listeners</li>
+    <li><strong>renderedCallback</strong> – DOM manipulation only</li>
+    <li><strong>disconnectedCallback</strong> – Clean up resources</li>
+    <li>Guard renderedCallback against multiple executions</li>
+    <li>Always remove event listeners in disconnectedCallback</li>
+    <li>Never modify state in renderedCallback (causes loops)</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

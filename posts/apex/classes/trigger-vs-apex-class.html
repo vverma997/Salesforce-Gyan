@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trigger vs Apex Class</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trigger vs Apex Class – When to Use What (Real Scenarios)</h1>
+
+  <p>
+    One of the most common questions in Salesforce development is: "Should I solve this with a trigger or an Apex class?" The answer depends on the scenario. Let's explore both with real-world examples.
+  </p>
+
+  <h2>Triggers: When to Use Them</h2>
+
+  <p>
+    <strong>Triggers</strong> automatically execute code when a DML event (insert, update, delete, undelete) happens on a record.
+  </p>
+
+  <h3>✅ Use Triggers For:</h3>
+  <ul>
+    <li>Data validation before save (before insert/update)</li>
+    <li>Field defaults based on related data</li>
+    <li>Automatic record creation on related objects</li>
+    <li>Cascading updates within the same transaction</li>
+  </ul>
+
+  <h3>Real Scenario: Auto-update Account Rating</h3>
+  <p>
+    <strong>Requirement:</strong> When an Opportunity is won, automatically update the related Account's rating to "Hot".
+  </p>
+
+  <pre><code>
+trigger OpportunityTrigger on Opportunity (after update) {
+    if (Trigger.isAfter && Trigger.isUpdate) {
+        OpportunityTriggerHandler.updateAccountRating(Trigger.new, Trigger.oldMap);
+    }
+}
+
+public class OpportunityTriggerHandler {
+    public static void updateAccountRating(List&lt;Opportunity&gt; newOpps, Map&lt;Id, Opportunity&gt; oldMap) {
+        Set&lt;Id&gt; accountIds = new Set&lt;Id&gt;();
+        
+        for (Opportunity opp : newOpps) {
+            if (opp.StageName == 'Closed Won' && oldMap.get(opp.Id).StageName != 'Closed Won') {
+                accountIds.add(opp.AccountId);
+            }
+        }
+        
+        List&lt;Account&gt; accountsToUpdate = new List&lt;Account&gt;();
+        for (Account acc : [SELECT Id FROM Account WHERE Id IN :accountIds]) {
+            acc.Rating = 'Hot';
+            accountsToUpdate.add(acc);
+        }
+        
+        update accountsToUpdate;
+    }
+}
+  </code></pre>
+
+  <h2>Apex Classes: When to Use Them</h2>
+
+  <p>
+    <strong>Apex Classes</strong> contain reusable logic that can be called from triggers, API endpoints, or scheduled jobs.
+  </p>
+
+  <h3>✅ Use Apex Classes For:</h3>
+  <ul>
+    <li>Reusable business logic (used by multiple triggers)</li>
+    <li>Batch processing</li>
+    <li>REST API endpoints</li>
+    <li>Scheduled jobs</li>
+    <li>Complex calculations and lookups</li>
+  </ul>
+
+  <h3>Real Scenario: Send Notifications to Sales Managers</h3>
+  <p>
+    <strong>Requirement:</strong> When a lead is converted, send an email to the accountowner. You also want to run this from a custom button and a scheduled job.
+  </p>
+
+  <pre><code>
+// Reusable Apex Class
+public class LeadConversionNotifier {
+    public static void notifyAccountOwner(Set&lt;Id&gt; accountIds) {
+        List&lt;Account&gt; accounts = [SELECT Id, OwnerId, Owner.Email FROM Account WHERE Id IN :accountIds];
+        List&lt;Messaging.SingleEmailMessage&gt; emails = new List&lt;Messaging.SingleEmailMessage&gt;();
+        
+        for (Account acc : accounts) {
+            Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+            mail.setTargetObjectId(acc.OwnerId);
+            mail.setSubject('New Lead Converted');
+            mail.setPlainTextBody('A new lead has been converted to an account.');
+            emails.add(mail);
+        }
+        
+        if (!emails.isEmpty()) {
+            Messaging.sendEmail(emails);
+        }
+    }
+}
+
+// Called from trigger
+trigger LeadTrigger on Lead (after update) {
+    if (Trigger.isAfter && Trigger.isUpdate) {
+        Set&lt;Id&gt; convertedAccounts = new Set&lt;Id&gt;();
+        
+        for (Lead lead : Trigger.new) {
+            if (lead.IsConverted && !Trigger.oldMap.get(lead.Id).IsConverted) {
+                convertedAccounts.add(lead.ConvertedAccountId);
+            }
+        }
+        
+        if (!convertedAccounts.isEmpty()) {
+            LeadConversionNotifier.notifyAccountOwner(convertedAccounts);
+        }
+    }
+}
+
+// Called from custom button/scheduled job
+global class LeadConversionBatch implements Schedulable {
+    global void execute(SchedulableContext ctx) {
+        Set&lt;Id&gt; recentlyConverted = new Set&lt;Id&gt;();
+        // ... fetch recently converted leads
+        LeadConversionNotifier.notifyAccountOwner(recentlyConverted);
+    }
+}
+  </code></pre>
+
+  <h2>Comparison Table</h2>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ccc; padding: 10px;">Feature</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Trigger</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Apex Class</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Auto-executes on DML</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Manually invoked</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Used for multiple objects</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ No (one per object)</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes (reusable)</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Testable</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes</td>
+    </tr>
+  </table>
+
+  <h2>Best Practice Pattern</h2>
+
+  <p>
+    <strong>Thin Trigger + Fat Class:</strong> Keep triggers thin, delegate business logic to reusable classes.
+  </p>
+
+  <pre><code>
+// GOOD: Trigger delegates to handler class
+trigger AccountTrigger on Account (before insert, before update, after insert, after update) {
+    if (Trigger.isBefore) {
+        AccountHandler.beforeSave(Trigger.new, Trigger.oldMap);
+    }
+    if (Trigger.isAfter) {
+        AccountHandler.afterSave(Trigger.new, Trigger.oldMap);
+    }
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use <strong>triggers</strong> for automatic data validation and cascade updates</li>
+    <li>Use <strong>Apex classes</strong> for reusable, testable business logic</li>
+    <li>Always separate logic from triggers into handler classes</li>
+    <li>One trigger per object, multiple handler classes for flexibility</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Basics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>LWC Basics – Structure, HTML, JS, Meta File</h1>
+
+  <p>
+    Lightning Web Components are built with a consistent folder structure and a small set of core files. This post explains the role of each file and how they work together.
+  </p>
+
+  <h2>1. Basic Component Structure</h2>
+
+  <p>
+    Every component lives in its own folder and contains at least these files:
+  </p>
+
+  <ul>
+    <li><strong>componentName.html</strong> – template markup</li>
+    <li><strong>componentName.js</strong> – component logic</li>
+    <li><strong>componentName.js-meta.xml</strong> – metadata configuration</li>
+    <li><strong>componentName.css</strong> – optional styling</li>
+  </ul>
+
+  <h3>Example folder layout</h3>
+  <pre><code>
+myComponent/
+  myComponent.html
+  myComponent.js
+  myComponent.js-meta.xml
+  myComponent.css
+  </code></pre>
+
+  <h2>2. HTML Template</h2>
+
+  <p>
+    The HTML file defines the component UI and binds data from JavaScript. Use standard HTML plus LWC directives.
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-card title="Account Info" icon-name="standard:account"&gt;
+        &lt;div class="slds-m-around_medium"&gt;
+            &lt;p&gt;Name: {accountName}&lt;/p&gt;
+            &lt;lightning-button
+                label="Refresh"
+                onclick={handleRefresh}
+                variant="brand"
+            &gt;&lt;/lightning-button&gt;
+        &lt;/div&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key HTML features</h3>
+  <ul>
+    <li><code>{property}</code> for one-way binding</li>
+    <li><code>if:true</code> / <code>if:false</code> for conditional rendering</li>
+    <li><code>for:each</code> for list iteration</li>
+    <li><code>onclick</code>, <code>onchange</code>, and other event handlers</li>
+  </ul>
+
+  <h2>3. JavaScript File</h2>
+
+  <p>
+    The JavaScript file defines component state, methods, and decorators that control reactivity.
+  </p>
+
+  <pre><code>
+import { LightningElement, api, track } from 'lwc';
+
+export default class MyComponent extends LightningElement {
+    @api recordId;    // Public property from parent
+    @track isLoading = false;  // Reactive property
+
+    accountName = 'Acme Corp';  // Private property
+
+    handleRefresh() {
+        this.isLoading = true;
+        setTimeout(() => {
+            this.isLoading = false;
+        }, 500);
+    }
+}
+  </code></pre>
+
+  <h3>Common decorators</h3>
+  <ul>
+    <li><code>@api</code> – expose public properties and methods</li>
+    <li><code>@track</code> – track nested property changes (less needed with simple fields)</li>
+    <li><code>@wire</code> – connect to data services or Apex</li>
+  </ul>
+
+  <h2>4. Meta XML File</h2>
+
+  <p>
+    The <code>.js-meta.xml</code> file configures component visibility, targets, and API version.
+  </p>
+
+  <pre><code>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata"&gt;
+    &lt;apiVersion&gt;57.0&lt;/apiVersion&gt;
+    &lt;isExposed&gt;true&lt;/isExposed&gt;
+    &lt;targets&gt;
+        &lt;target&gt;lightning__AppPage&lt;/target&gt;
+        &lt;target&gt;lightning__RecordPage&lt;/target&gt;
+        &lt;target&gt;lightning__HomePage&lt;/target&gt;
+    &lt;/targets&gt;
+    &lt;targetConfigs&gt;
+        &lt;targetConfig targets="lightning__RecordPage"&gt;
+            &lt;objects&gt;
+                &lt;object&gt;Account&lt;/object&gt;
+            &lt;/objects&gt;
+        &lt;/targetConfig&gt;
+    &lt;/targetConfigs&gt;
+&lt;/LightningComponentBundle&gt;
+  </code></pre>
+
+  <h3>What you can configure</h3>
+  <ul>
+    <li><strong><code>isExposed</code></strong> – make it available in App Builder</li>
+    <li><strong>targets</strong> – specify pages where it can be used</li>
+    <li><strong>targetConfigs</strong> – configure properties and object context</li>
+  </ul>
+
+  <h2>5. Additional Files</h2>
+
+  <p>
+    Optionally add these files for richer functionality:
+  </p>
+  <ul>
+    <li><strong>componentName.css</strong> – component-specific styling</li>
+    <li><strong>componentName.svg</strong> – custom icon support</li>
+    <li><strong>componentName.js-meta.xml</strong> – set property types and targets</li>
+  </ul>
+
+  <h2>6. How the Files Work Together</h2>
+
+  <p>
+    The framework compiles and bundles these files. The JS file handles state and behavior, the HTML file renders markup, and the meta file controls deployment and visibility.
+  </p>
+
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li>LWC components use HTML, JS, and meta XML files together</li>
+    <li>Use <code>@api</code> for public data and methods</li>
+    <li>Use <code>{property}</code> binding to display JS values</li>
+    <li>The meta file enables App Builder and page targets</li>
+    <li>Keep component folders clean and focused</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

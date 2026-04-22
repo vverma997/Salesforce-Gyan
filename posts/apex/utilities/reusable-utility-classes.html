@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reusable Utility Classes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Reusable Utility Classes – Building Scalable Architecture</h1>
+
+  <p>
+    Utility classes contain reusable methods that are used across your codebase. Building scalable utility classes is key to maintainable Salesforce applications.
+  </p>
+
+  <h2>1. String Utility Class</h2>
+
+  <pre><code>
+public class StringUtil {
+    
+    // Check if string is empty or null
+    public static Boolean isEmpty(String value) {
+        return String.isBlank(value);
+    }
+    
+    // Truncate string to max length
+    public static String truncate(String value, Integer maxLength) {
+        if (String.isBlank(value)) return value;
+        return value.length() &gt; maxLength ? value.substring(0, maxLength) : value;
+    }
+    
+    // Capitalize first letter
+    public static String capitalize(String value) {
+        if (String.isBlank(value)) return value;
+        return value.substring(0, 1).toUpperCase() + value.substring(1).toLowerCase();
+    }
+    
+    // Remove all whitespace
+    public static String removeWhitespace(String value) {
+        if (String.isBlank(value)) return value;
+        return value.replaceAll('\\s', '');
+    }
+    
+    // Convert comma-separated string to list
+    public static List&lt;String&gt; parseList(String value, String delimiter) {
+        List&lt;String&gt; result = new List&lt;String&gt;();
+        if (String.isBlank(value)) return result;
+        
+        for (String item : value.split(delimiter)) {
+            result.add(item.trim());
+        }
+        return result;
+    }
+    
+    // Join list into comma-separated string
+    public static String joinList(List&lt;String&gt; values, String delimiter) {
+        return String.join(values, delimiter);
+    }
+}
+
+// Usage
+Account acc = new Account(
+    Name = StringUtil.capitalize('acme corp'),  // 'Acme corp'
+    Description = StringUtil.truncate(longText, 100)
+);
+  </code></pre>
+
+  <h2>2. List Utility Class</h2>
+
+  <pre><code>
+public class ListUtil {
+    
+    // Check if list is empty
+    public static Boolean isEmpty(List&lt;Object&gt; list) {
+        return list == null || list.isEmpty();
+    }
+    
+    // Get first element safely
+    public static Object getFirst(List&lt;Object&gt; list) {
+        return isEmpty(list) ? null : list.get(0);
+    }
+    
+    // Remove duplicates
+    public static List&lt;String&gt; removeDuplicates(List&lt;String&gt; values) {
+        if (isEmpty(values)) return new List&lt;String&gt;();
+        
+        Set&lt;String&gt; uniqueValues = new Set&lt;String&gt;(values);
+        return new List&lt;String&gt;(uniqueValues);
+    }
+    
+    // Check if lists have common elements
+    public static Boolean hasCommonElements(List&lt;String&gt; list1, List&lt;String&gt; list2) {
+        if (isEmpty(list1) || isEmpty(list2)) return false;
+        
+        Set&lt;String&gt; set1 = new Set&lt;String&gt;(list1);
+        for (String item : list2) {
+            if (set1.contains(item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // Find index of element
+    public static Integer indexOf(List&lt;String&gt; list, String value) {
+        if (isEmpty(list)) return -1;
+        
+        for (Integer i = 0; i &lt; list.size(); i++) {
+            if (list.get(i) == value) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    // Flatten list of lists
+    public static List&lt;String&gt; flatten(List&lt;List&lt;String&gt;&gt; nestedList) {
+        List&lt;String&gt; result = new List&lt;String&gt;();
+        
+        for (List&lt;String&gt; subList : nestedList) {
+            if (!isEmpty(subList)) {
+                result.addAll(subList);
+            }
+        }
+        return result;
+    }
+}
+
+// Usage
+List&lt;String&gt; colors = new List&lt;String&gt;{'red', 'blue', 'red', 'green'};
+List&lt;String&gt; unique = ListUtil.removeDuplicates(colors);  // {red, blue, green}
+  </code></pre>
+
+  <h2>3. Map Utility Class</h2>
+
+  <pre><code>
+public class MapUtil {
+    
+    // Safe map get with default value
+    public static Object getOrDefault(Map&lt;String, Object&gt; map, String key, Object defaultValue) {
+        return map.containsKey(key) ? map.get(key) : defaultValue;
+    }
+    
+    // Invert a map (swap keys and values)
+    public static Map&lt;Object, String&gt; invertMap(Map&lt;String, Object&gt; originalMap) {
+        Map&lt;Object, String&gt; inverted = new Map&lt;Object, String&gt;();
+        
+        for (String key : originalMap.keySet()) {
+            inverted.put(originalMap.get(key), key);
+        }
+        return inverted;
+    }
+    
+    // Merge two maps
+    public static Map&lt;String, Object&gt; mergeMaps(Map&lt;String, Object&gt; map1, Map&lt;String, Object&gt; map2) {
+        Map&lt;String, Object&gt; merged = new Map&lt;String, Object&gt;(map1);
+        merged.putAll(map2);
+        return merged;
+    }
+    
+    // Filter map by value condition
+    public static Map&lt;String, Integer&gt; filterByValue(Map&lt;String, Integer&gt; map, Integer minValue) {
+        Map&lt;String, Integer&gt; filtered = new Map&lt;String, Integer&gt;();
+        
+        for (String key : map.keySet()) {
+            if (map.get(key) &gt;= minValue) {
+                filtered.put(key, map.get(key));
+            }
+        }
+        return filtered;
+    }
+}
+
+// Usage
+Map&lt;String, Object&gt; user = new Map&lt;String, Object&gt;{
+    'name' =&gt; 'John',
+    'age' =&gt; 30
+};
+
+String name = (String) MapUtil.getOrDefault(user, 'name', 'Unknown');  // 'John'
+String email = (String) MapUtil.getOrDefault(user, 'email', 'N/A');    // 'N/A'
+  </code></pre>
+
+  <h2>4. Date/Time Utility Class</h2>
+
+  <pre><code>
+public class DateTimeUtil {
+    
+    // Get start of day
+    public static DateTime startOfDay(Date d) {
+        return DateTime.newInstance(d.year(), d.month(), d.day(), 0, 0, 0);
+    }
+    
+    // Get end of day
+    public static DateTime endOfDay(Date d) {
+        return DateTime.newInstance(d.year(), d.month(), d.day(), 23, 59, 59);
+    }
+    
+    // Check if date is today
+    public static Boolean isToday(Date d) {
+        return d == Date.today();
+    }
+    
+    // Check if date is in the past
+    public static Boolean isPast(Date d) {
+        return d &lt; Date.today();
+    }
+    
+    // Check if date is in the future
+    public static Boolean isFuture(Date d) {
+        return d &gt; Date.today();
+    }
+    
+    // Add business days (excluding weekends)
+    public static Date addBusinessDays(Date startDate, Integer daysToAdd) {
+        Date result = startDate;
+        Integer count = 0;
+        
+        while (count &lt; daysToAdd) {
+            result = result.addDays(1);
+            
+            // Skip weekends (Saturday = 7, Sunday = 1)
+            Integer dayOfWeek = Math.mod(result.toStartOfWeek().daysBetween(result) + 1, 7);
+            if (dayOfWeek &gt; 1 && dayOfWeek &lt; 7) {
+                count++;
+            }
+        }
+        
+        return result;
+    }
+    
+    // Get age from birthdate
+    public static Integer getAge(Date birthDate) {
+        Integer age = Date.today().year() - birthDate.year();
+        if (Date.today().dayOfYear() &lt; birthDate.dayOfYear()) {
+            age--;
+        }
+        return age;
+    }
+}
+
+// Usage
+Date dueDate = DateTimeUtil.addBusinessDays(Date.today(), 5);  // 5 business days from today
+DateTime endOfToday = DateTimeUtil.endOfDay(Date.today());     // 23:59:59 today
+  </code></pre>
+
+  <h2>5. Math/Number Utility Class</h2>
+
+  <pre><code>
+public class NumberUtil {
+    
+    // Safe integer conversion
+    public static Integer toInteger(String value, Integer defaultValue) {
+        try {
+            return Integer.valueOf(value);
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+    
+    // Safe decimal conversion
+    public static Decimal toDecimal(String value, Decimal defaultValue) {
+        try {
+            return Decimal.valueOf(value);
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+    
+    // Round to nearest
+    public static Decimal roundTo(Decimal value, Integer places) {
+        Decimal multiplier = Math.pow(10, places);
+        return Math.round(value * multiplier) / multiplier;
+    }
+    
+    // Calculate percentage
+    public static Decimal getPercentage(Decimal part, Decimal whole) {
+        if (whole == 0) return 0;
+        return (part / whole) * 100;
+    }
+    
+    // Check if number is between range
+    public static Boolean isBetween(Decimal value, Decimal min, Decimal max) {
+        return value &gt;= min && value &lt;= max;
+    }
+    
+    // Get absolute value
+    public static Decimal abs(Decimal value) {
+        return value &lt; 0 ? -value : value;
+    }
+}
+
+// Usage
+Decimal rounded = NumberUtil.roundTo(10.556, 2);  // 10.56
+Decimal percentage = NumberUtil.getPercentage(75, 100);  // 75.0
+  </code></pre>
+
+  <h2>6. Query Utility Class</h2>
+
+  <pre><code>
+public with sharing class QueryUtil {
+    
+    // Safe SOQL query with error handling
+    public static List&lt;SObject&gt; safeQuery(String query) {
+        try {
+            return Database.query(query);
+        } catch (QueryException e) {
+            System.debug('Query error: ' + e.getMessage());
+            return new List&lt;SObject&gt;();
+        }
+    }
+    
+    // Count records without throwing exception
+    public static Integer countRecords(String objectName) {
+        try {
+            String countQuery = 'SELECT COUNT() FROM ' + objectName;
+            return Database.countQuery(countQuery);
+        } catch (Exception e) {
+            System.debug('Count failed: ' + e.getMessage());
+            return 0;
+        }
+    }
+    
+    // Build dynamic WHERE clause
+    public static String buildWhereClause(Map&lt;String, Object&gt; filters) {
+        List&lt;String&gt; conditions = new List&lt;String&gt;();
+        
+        for (String field : filters.keySet()) {
+            Object value = filters.get(field);
+            
+            if (value instanceof String) {
+                conditions.add(field + ' = \'' + String.escapeSingleQuotes((String)value) + '\'');
+            } else if (value instanceof Integer) {
+                conditions.add(field + ' = ' + value);
+            } else if (value instanceof Decimal) {
+                conditions.add(field + ' = ' + value);
+            }
+        }
+        
+        return conditions.isEmpty() ? '' : String.join(conditions, ' AND ');
+    }
+}
+
+// Usage
+List&lt;SObject&gt; accounts = QueryUtil.safeQuery('SELECT Id, Name FROM Account LIMIT 100');
+Integer count = QueryUtil.countRecords('Account');
+  </code></pre>
+
+  <h2>7. File/JSON Utility Class</h2>
+
+  <pre><code>
+public class JsonUtil {
+    
+    // Safely deserialize JSON
+    public static Object deserialize(String jsonString, Type classType) {
+        try {
+            return JSON.deserialize(jsonString, classType);
+        } catch (JSONException e) {
+            System.debug('JSON parse error: ' + e.getMessage());
+            return null;
+        }
+    }
+    
+    // Safely serialize to JSON
+    public static String serialize(Object obj) {
+        try {
+            return JSON.serialize(obj);
+        } catch (Exception e) {
+            System.debug('Serialization error: ' + e.getMessage());
+            return null;
+        }
+    }
+    
+    // Get value from map with type safety
+    public static String getStringValue(Map&lt;String, Object&gt; map, String key) {
+        Object value = map.get(key);
+        return value != null ? String.valueOf(value) : null;
+    }
+    
+    // Get nested value from map
+    public static Object getNestedValue(Map&lt;String, Object&gt; map, String dotPath) {
+        List&lt;String&gt; paths = dotPath.split('\\.');
+        Object current = map;
+        
+        for (String path : paths) {
+            if (current instanceof Map&lt;String, Object&gt;) {
+                current = ((Map&lt;String, Object&gt;) current).get(path);
+            } else {
+                return null;
+            }
+        }
+        
+        return current;
+    }
+}
+
+// Usage
+WeatherResponse weather = (WeatherResponse) JsonUtil.deserialize(jsonStr, WeatherResponse.class);
+String json = JsonUtil.serialize(weatherObject);
+  </code></pre>
+
+  <h2>Best Practices for Utility Classes</h2>
+
+  <ul>
+    <li>Make methods <code>static</code> for utility classes</li>
+    <li>Use meaningful names that describe what the method does</li>
+    <li>Add error handling to prevent exceptions</li>
+    <li>Document complex logic with comments</li>
+    <li>Keep utilities focused on one domain (Strings, Lists, Maps, etc.)</li>
+    <li>Test utility classes thoroughly</li>
+    <li>Avoid storing state in utility classes</li>
+  </ul>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Build reusable utility libraries to avoid code duplication</li>
+    <li>Create utilities for strings, lists, maps, dates, numbers, queries, and JSON</li>
+    <li>Include error handling in all utility methods</li>
+    <li>Use static methods for utility classes</li>
+    <li>Document utility methods with examples</li>
+    <li>Test utilities with edge cases (nulls, empty lists, etc.)</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

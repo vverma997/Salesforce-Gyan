@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Calling Apex from LWC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Calling Apex from LWC – Real Examples</h1>
+
+  <p>
+    Lightning Web Components can call Apex methods from JavaScript for business logic, data creation, updates, and complex queries.
+  </p>
+
+  <h2>1. Calling Apex with @wire</h2>
+
+  <p>
+    Use <code>@wire</code> for read-only Apex calls and reactive data fetching.
+  </p>
+
+  <pre><code>
+// accountList.js
+import { LightningElement, wire, track } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountList extends LightningElement {
+    @track accounts;
+    @track error;
+
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.accounts = undefined;
+        }
+    }
+}
+  </code></pre>
+
+  <h3>Apex Class</h3>
+  <pre><code>
+public with sharing class AccountController {
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getAccounts() {
+        return [SELECT Id, Name, Phone, Industry FROM Account LIMIT 50];
+    }
+}
+  </code></pre>
+
+  <h2>2. Imperative Call for Create/Update</h2>
+
+  <p>
+    Use imperative Apex when you need actions triggered by user interaction.
+  </p>
+
+  <pre><code>
+// accountForm.js
+import { LightningElement, track } from 'lwc';
+import saveAccount from '@salesforce/apex/AccountController.saveAccount';
+
+export default class AccountForm extends LightningElement {
+    @track accountName = '';
+    @track isLoading = false;
+    @track error;
+
+    handleNameChange(event) {
+        this.accountName = event.target.value;
+    }
+
+    async handleSave() {
+        this.isLoading = true;
+        this.error = undefined;
+        try {
+            await saveAccount({ accountName: this.accountName });
+            this.accountName = '';
+        } catch (error) {
+            this.error = error.body ? error.body.message : error.message;
+        } finally {
+            this.isLoading = false;
+        }
+    }
+}
+  </code></pre>
+
+  <h3>Apex Class</h3>
+  <pre><code>
+public with sharing class AccountController {
+    @AuraEnabled
+    public static Account saveAccount(String accountName) {
+        Account acc = new Account(Name = accountName);
+        insert acc;
+        return acc;
+    }
+}
+  </code></pre>
+
+  <h2>3. Passing Parameters to Apex</h2>
+
+  <p>
+    Pass values from the client to Apex using object literals.
+  </p>
+
+  <pre><code>
+// accountDetails.js
+import { LightningElement, track } from 'lwc';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class AccountDetails extends LightningElement {
+    @track account = { id: '', name: '', phone: '' };
+    @track error;
+
+    async handleUpdate() {
+        try {
+            await updateAccount({ 
+                accountId: this.account.id,
+                accountName: this.account.name,
+                accountPhone: this.account.phone
+            });
+        } catch (error) {
+            this.error = error.body ? error.body.message : error.message;
+        }
+    }
+}
+  </code></pre>
+
+  <h3>Apex Class</h3>
+  <pre><code>
+public with sharing class AccountController {
+    @AuraEnabled
+    public static void updateAccount(Id accountId, String accountName, String accountPhone) {
+        Account acc = [SELECT Id FROM Account WHERE Id = :accountId LIMIT 1];
+        acc.Name = accountName;
+        acc.Phone = accountPhone;
+        update acc;
+    }
+}
+  </code></pre>
+
+  <h2>4. Using refreshApex()</h2>
+
+  <p>
+    When Apex data changes, use <code>refreshApex</code> to reload wired data.
+  </p>
+
+  <pre><code>
+import { LightningElement, wire, track } from 'lwc';
+import { refreshApex } from '@salesforce/apex';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+import deleteAccount from '@salesforce/apex/AccountController.deleteAccount';
+
+export default class AccountManager extends LightningElement {
+    @track accounts;
+    @track error;
+    wiredAccountsResult;
+
+    @wire(getAccounts)
+    wiredAccounts(result) {
+        this.wiredAccountsResult = result;
+        if (result.data) {
+            this.accounts = result.data;
+            this.error = undefined;
+        } else if (result.error) {
+            this.error = result.error;
+        }
+    }
+
+    async handleDelete(event) {
+        const accountId = event.target.dataset.id;
+        try {
+            await deleteAccount({ accountId });
+            await refreshApex(this.wiredAccountsResult);
+        } catch (error) {
+            this.error = error.body ? error.body.message : error.message;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>5. Error Handling Example</h2>
+
+  <p>
+    Always wrap imperative Apex calls with <code>try/catch</code>, and show user-friendly messages.
+  </p>
+
+  <pre><code>
+try {
+    await saveAccount({ accountName: this.accountName });
+} catch (error) {
+    this.showErrorToast(error);
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li>Use <code>@wire</code> for read-only queries and reactive data</li>
+    <li>Use imperative Apex for create/update/delete and manual control</li>
+    <li>Always pass parameters as object literals</li>
+    <li>Use <code>refreshApex()</code> after data mutations</li>
+    <li>Handle errors with <code>try/catch</code> and user messages</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

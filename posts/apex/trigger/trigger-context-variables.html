@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trigger Context Variables</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Trigger Context Variables — What You Need to Know</h1>
+
+  <p>
+    When you write Apex triggers, the magic comes from the built-in <b>Trigger</b> context variables.
+    These are the values Salesforce provides automatically, and they tell your code what is happening.
+  </p>
+
+  <p>
+    If you already know how to loop over <code>Trigger.new</code>, the next step is understanding how to use
+    <code>Trigger.isInsert</code>, <code>Trigger.isUpdate</code>, <code>Trigger.newMap</code>, and the rest.
+  </p>
+
+  <h2>Trigger context variables — the core ones</h2>
+
+  <ul>
+    <li><b>Trigger.new</b> — the new version of records in a <b>before</b> or <b>after</b> insert/update trigger</li>
+    <li><b>Trigger.old</b> — the old version of records in update/delete triggers</li>
+    <li><b>Trigger.newMap</b> — a map of record IDs to new records</li>
+    <li><b>Trigger.oldMap</b> — a map of record IDs to old records</li>
+    <li><b>Trigger.isBefore</b> / <b>Trigger.isAfter</b> — whether the trigger is running before or after save</li>
+    <li><b>Trigger.isInsert</b> / <b>Trigger.isUpdate</b> / <b>Trigger.isDelete</b> — the DML event type</li>
+  </ul>
+
+  <h2>Why these variables matter</h2>
+
+  <p>
+    They let you write a single trigger that handles multiple events safely.
+    Without them, you would not know whether the code is inserting, updating, or deleting records.
+  </p>
+
+  <pre><code>
+trigger OpportunityTrigger on Opportunity (before insert, before update, after update, after delete) {
+    if (Trigger.isBefore) {
+        handleBefore(Trigger.new);
+    }
+
+    if (Trigger.isAfter) {
+        handleAfter(Trigger.new, Trigger.oldMap);
+    }
+}
+  </code></pre>
+
+  <h2>Common patterns</h2>
+
+  <h3>Use <code>Trigger.new</code> for new/changed values</h3>
+
+  <p>
+    In <b>before insert</b> and <b>before update</b>, <code>Trigger.new</code> contains the records you can modify.
+    That is the place to add validation, normalization, and default values.
+  </p>
+
+  <pre><code>
+for (Opportunity opp : Trigger.new) {
+    if (opp.CloseDate == null) {
+        opp.addError('Close Date is required');
+    }
+}
+  </code></pre>
+
+  <h3>Use <code>Trigger.old</code> to compare past values</h3>
+
+  <p>
+    When updating or deleting records, <code>Trigger.old</code> gives you the original values before the change.
+    This is important for change detection and audit-like logic.
+  </p>
+
+  <pre><code>
+for (Opportunity opp : Trigger.new) {
+    Opportunity oldOpp = Trigger.oldMap.get(opp.Id);
+    if (oldOpp.StageName != opp.StageName) {
+        // Stage changed
+    }
+}
+  </code></pre>
+
+  <h2>Example: insert vs update in one trigger</h2>
+
+  <pre><code>
+trigger OpportunityStageTrigger on Opportunity (before insert, before update) {
+    if (Trigger.isInsert) {
+        for (Opportunity opp : Trigger.new) {
+            opp.StageName = 'Prospecting';
+        }
+    }
+
+    if (Trigger.isUpdate) {
+        for (Opportunity opp : Trigger.new) {
+            Opportunity oldOpp = Trigger.oldMap.get(opp.Id);
+            if (oldOpp.StageName != opp.StageName) {
+                // Do something when stage changes
+            }
+        }
+    }
+}
+  </code></pre>
+
+  <h2>Quick context reference</h2>
+
+  <ul>
+    <li><b>Trigger.isInsert</b> — insert event</li>
+    <li><b>Trigger.isUpdate</b> — update event</li>
+    <li><b>Trigger.isDelete</b> — delete event</li>
+    <li><b>Trigger.isBefore</b> — runs before DML save</li>
+    <li><b>Trigger.isAfter</b> — runs after DML save</li>
+    <li><b>Trigger.newMap</b> / <b>Trigger.oldMap</b> — use maps when you need easy ID lookup</li>
+  </ul>
+
+  <h2>Best practice</h2>
+
+  <p>
+    Always write trigger logic with bulk records in mind. <code>Trigger.new</code> may contain many records,
+    so never assume only one record is present.
+  </p>
+
+  <p>
+    Use methods like <code>handleBefore</code> or <code>handleAfter</code> to keep the trigger body clean and readable.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>
+

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Before vs After Trigger</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Before vs After Trigger — What Actually Matters</h1>
+
+  <p>
+    In the last post, we looked at a simple Apex Trigger. Now comes the part that confuses almost everyone at the start —
+    <b>before vs after triggers</b>.
+  </p>
+
+  <p>
+    Both run automatically, both look similar… but they are used for completely different purposes.
+    Once you understand this, your trigger logic becomes much cleaner.
+  </p>
+
+  <h2>Before Trigger</h2>
+
+  <p>
+    A <b>before trigger</b> runs before the record is saved to the database.
+    This is where you prepare or validate your data.
+  </p>
+
+  <pre><code>
+trigger AccountBeforeTrigger on Account (before insert) {
+    for (Account acc : Trigger.new) {
+        if (acc.Name != null) {
+            acc.Name = acc.Name.toUpperCase();
+        }
+    }
+}
+  </code></pre>
+
+  <p>
+    Here, we are modifying the record directly before it gets saved.
+    No extra DML is needed — Salesforce handles the save automatically.
+  </p>
+
+  <h2>After Trigger</h2>
+
+  <p>
+    An <b>after trigger</b> runs after the record is saved.
+    At this point, the record already exists in the database and has an ID.
+  </p>
+
+  <pre><code>
+trigger AccountAfterTrigger on Account (after insert) {
+    List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+
+    for (Account acc : Trigger.new) {
+        contacts.add(new Contact(
+            LastName = acc.Name,
+            AccountId = acc.Id
+        ));
+    }
+
+    insert contacts;
+}
+  </code></pre>
+
+  <p>
+    Here, we create related records using the Account ID, which is only available after insert.
+  </p>
+
+  <h2>So what’s the real difference?</h2>
+
+  <p>
+    Think of it like this:
+  </p>
+
+  <ul>
+    <li><b>Before Trigger</b> → Fix or validate the record</li>
+    <li><b>After Trigger</b> → Do something because the record exists</li>
+  </ul>
+
+  <h2>Common mistakes I see</h2>
+
+  <ul>
+    <li>Doing DML inside before triggers (not needed)</li>
+    <li>Trying to update the same record in after triggers</li>
+    <li>Forgetting bulk handling</li>
+  </ul>
+
+  <h2>One simple rule</h2>
+
+  <p>
+    If you’re updating the same record → use <b>before</b><br>
+    If you’re working with related data → use <b>after</b>
+  </p>
+
+  <p>
+    That’s it. Keep it simple and you’ll avoid most trigger issues.
+    In real projects, this clarity makes a big difference.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

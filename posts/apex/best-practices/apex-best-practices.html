@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Apex Best Practices</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Apex Best Practices – Bulkification, Governor Limits & Clean Code</h1>
+
+  <p>
+    Writing efficient Apex code is crucial for building scalable Salesforce applications. This guide covers the three pillars of Apex best practices: bulkification, respecting governor limits, and maintaining clean code.
+  </p>
+
+  <h2>1. Bulkification: The Golden Rule</h2>
+
+  <p>
+    <strong>Bulkification</strong> means writing code that processes multiple records at once instead of one-by-one. Salesforce can trigger your code for 1-200 records in a single execution.
+  </p>
+
+  <h3>❌ Bad - Using loops with DML</h3>
+  <pre><code>
+for (Account acc : accounts) {
+    acc.Active__c = true;
+    update acc;  // DML in loop! Hits limit
+}
+  </code></pre>
+
+  <h3>✅ Good - Bulk DML outside loops</h3>
+  <pre><code>
+List&lt;Account&gt; accountsToUpdate = new List&lt;Account&gt;();
+for (Account acc : accounts) {
+    acc.Active__c = true;
+    accountsToUpdate.add(acc);
+}
+update accountsToUpdate;  // Single DML call
+  </code></pre>
+
+  <h2>2. Respecting Governor Limits</h2>
+
+  <p>
+    Salesforce enforces limits to protect the platform's stability. The most common limits are:
+  </p>
+
+  <ul>
+    <li><strong>DML Statements:</strong> 150 per transaction</li>
+    <li><strong>SOQL Queries:</strong> 100 per transaction</li>
+    <li><strong>Heap Size:</strong> 6 MB (execution) / 12 MB (testing)</li>
+    <li><strong>CPU Time:</strong> 10,000 ms per transaction</li>
+    <li><strong>API Calls:</strong> 100 per transaction</li>
+  </ul>
+
+  <h3>❌ Bad - SOQL in loop</h3>
+  <pre><code>
+for (Contact con : contacts) {
+    List&lt;Opportunity&gt; opps = [SELECT Id FROM Opportunity WHERE AccountId = :con.AccountId];
+    // Too many queries!
+}
+  </code></pre>
+
+  <h3>✅ Good - Query once, process data</h3>
+  <pre><code>
+Map&lt;Id, List&lt;Opportunity&gt;&gt; oppsByAccount = new Map&lt;Id, List&lt;Opportunity&gt;&gt;();
+
+for (Opportunity opp : [SELECT Id, AccountId FROM Opportunity]) {
+    if (!oppsByAccount.containsKey(opp.AccountId)) {
+        oppsByAccount.put(opp.AccountId, new List&lt;Opportunity&gt;());
+    }
+    oppsByAccount.get(opp.AccountId).add(opp);
+}
+  </code></pre>
+
+  <h2>3. Clean Code Principles</h2>
+
+  <h3>Use Meaningful Names</h3>
+  <pre><code>
+// Bad
+List&lt;Account&gt; a = new List&lt;Account&gt;();
+
+// Good
+List&lt;Account&gt; activeAccounts = new List&lt;Account&gt;();
+  </code></pre>
+
+  <h3>Keep Methods Small and Focused</h3>
+  <pre><code>
+// Bad - Method does too much
+public void processAccounts(List&lt;Account&gt; accounts) {
+    // validation
+    // processing
+    // dml
+}
+
+// Good - Single responsibility
+private void validateAccounts(List&lt;Account&gt; accounts) { }
+private void calculateMetrics(List&lt;Account&gt; accounts) { }
+  </code></pre>
+
+  <h3>Use Comments Wisely</h3>
+  <pre><code>
+// Bad - States the obvious
+int count = 0;  // increment count
+
+// Good - Explains the WHY
+// Exclude test records from billing calculation
+List&lt;Account&gt; billableAccounts = [SELECT Id FROM Account WHERE IsTest__c = false];
+  </code></pre>
+
+  <h2>4. Error Handling Best Practice</h2>
+
+  <pre><code>
+try {
+    update records;
+} catch (DmlException e) {
+    System.debug('Update failed: ' + e.getMessage());
+    throw new CustomException('Failed to update records');
+}
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Always bulkify: process multiple records, avoid loops with DML/SOQL</li>
+    <li>Monitor governor limits actively during development</li>
+    <li>Write clean, readable code with meaningful names</li>
+    <li>Delegate business logic to handler classes</li>
+    <li>Test with bulk data to catch issues early</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>@wire vs Imperative Apex in LWC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>@wire vs Imperative Apex in LWC</h1>
+
+  <p>
+    Getting data from Apex into LWC components requires either the @wire decorator or imperative Apex calls. This post explains when to use each approach and how to balance reactive data with manual control.
+  </p>
+
+  <h2>1. Understanding @wire</h2>
+
+  <p>
+    <strong>@wire</strong> is a reactive data service that automatically fetches data and updates your component when inputs change.
+  </p>
+
+  <h3>Simple @wire Example</h3>
+  <pre><code>
+// accountList.js
+import { LightningElement, wire, track } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountList extends LightningElement {
+    @track error;
+
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.accounts = undefined;
+        }
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- accountList.html --&gt;
+&lt;template&gt;
+    &lt;div if:true={accounts}&gt;
+        &lt;template for:each={accounts} for:item="account"&gt;
+            &lt;div key={account.Id}&gt;
+                &lt;p&gt;{account.Name}&lt;/p&gt;
+            &lt;/div&gt;
+        &lt;/template&gt;
+    &lt;/div&gt;
+
+    &lt;lightning-spinner if:true={loading}&gt;&lt;/lightning-spinner&gt;
+
+    &lt;div if:true={error}&gt;
+        Error: {error.body.message}
+    &lt;/div&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>2. @wire with Reactive Parameters</h2>
+
+  <p>
+    The power of @wire is automatic re-fetching when parameters change:
+  </p>
+
+  <pre><code>
+// accountDetails.js
+import { LightningElement, wire, track } from 'lwc';
+import getAccountById from '@salesforce/apex/AccountController.getAccountById';
+
+export default class AccountDetails extends LightningElement {
+    @track selectedId = '001D3A20D50B8D5A9000000';
+    accounts;
+    error;
+
+    // When selectedId changes, @wire automatically refetches
+    @wire(getAccountById, { accountId: '$selectedId' })
+    wiredAccount({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.accounts = undefined;
+        }
+    }
+
+    handleSelectChange(event) {
+        this.selectedId = event.target.value;  // Triggers re-fetch
+    }
+}
+  </code></pre>
+
+  <h3>Apex Controller</h3>
+  <pre><code>
+// AccountController.cls
+public with sharing class AccountController {
+    
+    @AuraEnabled(cacheable=true)
+    public static Account getAccountById(String accountId) {
+        return [SELECT Id, Name, Phone, Website FROM Account WHERE Id = :accountId];
+    }
+}
+  </code></pre>
+
+  <h2>3. Imperative Apex Calls</h2>
+
+  <p>
+    <strong>Imperative</strong> calls give you more control than @wire. Call Apex methods manually whenever you need.
+  </p>
+
+  <h3>Basic Imperative Call</h3>
+  <pre><code>
+// accountForm.js
+import { LightningElement, track } from 'lwc';
+import createAccount from '@salesforce/apex/AccountController.createAccount';
+
+export default class AccountForm extends LightningElement {
+    @track accountName = '';
+    @track isLoading = false;
+    @track error;
+
+    async handleSaveAccount() {
+        this.isLoading = true;
+        this.error = undefined;
+
+        try {
+            const result = await createAccount({ 
+                accountName: this.accountName 
+            });
+            
+            console.log('Account created:', result);
+            this.accountName = '';  // Clear form
+        } catch (error) {
+            this.error = error.body.message;
+        } finally {
+            this.isLoading = false;
+        }
+    }
+}
+  </code></pre>
+
+  <h3>Apex Method for Imperative Call</h3>
+  <pre><code>
+// AccountController.cls
+public with sharing class AccountController {
+    
+    @AuraEnabled
+    public static Account createAccount(String accountName) {
+        Account acc = new Account(Name = accountName);
+        insert acc;
+        return acc;
+    }
+}
+  </code></pre>
+
+  <h2>4. Comparison: @wire vs Imperative</h2>
+
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ccc; padding: 10px;">Feature</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">@wire</th>
+      <th style="border: 1px solid #ccc; padding: 10px;">Imperative</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Auto data refresh</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Yes (on param change)</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ Manual control</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Caching support</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Built-in (with cacheable=true)</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ Manual caching</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">User interaction</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ Limited</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Full control</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Data mutations</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">❌ Read-only</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Create/Update/Delete</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px;">Error handling</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Automatic</td>
+      <td style="border: 1px solid #ccc; padding: 10px;">✅ Try/catch</td>
+    </tr>
+  </table>
+
+  <h2>5. When to Use @wire</h2>
+
+  <h3>✅ Good Use Cases for @wire</h3>
+  <ul>
+    <li>Displaying read-only data (lists, details)</li>
+    <li>Data that depends on route parameters or component properties</li>
+    <li>Frequently accessed data (benefits from caching)</li>
+    <li>Data that should auto-refresh when filters change</li>
+  </ul>
+
+  <pre><code>
+// Product filter component
+import { LightningElement, wire, track } from 'lwc';
+import getProducts from '@salesforce/apex/ProductController.getProducts';
+
+export default class ProductFilter extends LightningElement {
+    @track category = 'Electronics';
+    @track minPrice = 0;
+
+    @wire(getProducts, { 
+        category: '$category',
+        minPrice: '$minPrice'
+    })
+    products;
+
+    handleCategoryChange(event) {
+        this.category = event.target.value;  // Auto-refetch
+    }
+}
+  </code></pre>
+
+  <h2>6. When to Use Imperative Apex</h2>
+
+  <h3>✅ Good Use Cases for Imperative</h3>
+  <ul>
+    <li>Creating, updating, or deleting records</li>
+    <li>Complex workflows triggered by user actions</li>
+    <li>Conditional data fetching</li>
+    <li>Long-running operations with progress tracking</li>
+  </ul>
+
+  <pre><code>
+// Account with bulk operations
+import { LightningElement, track } from 'lwc';
+import updateAccountBatch from '@salesforce/apex/AccountController.updateAccountBatch';
+
+export default class BulkAccountUpdater extends LightningElement {
+    @track selectedAccounts = [];
+    @track updating = false;
+    @track progress = 0;
+
+    async handleBulkUpdate() {
+        this.updating = true;
+
+        try {
+            const result = await updateAccountBatch({ 
+                accountIds: this.selectedAccounts 
+            });
+            
+            console.log(`Updated ${result.updated} accounts`);
+        } catch (error) {
+            console.error('Bulk update failed:', error);
+        } finally {
+            this.updating = false;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>7. Combined Approach</h2>
+
+  <p>
+    Often the best solution combines both @wire and imperative:
+  </p>
+
+  <pre><code>
+// accountManager.js
+import { LightningElement, wire, track } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class AccountManager extends LightningElement {
+    @track accounts = [];
+    @track error;
+    @track updating = false;
+
+    // Display list with @wire
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+        }
+    }
+
+    // Update with imperative call
+    async handleUpdateAccount(accountId, newValues) {
+        this.updating = true;
+
+        try {
+            await updateAccount({ 
+                accountId, 
+                accountData: newValues 
+            });
+
+            // Refresh the @wire data
+            this.refreshAccounts();
+        } catch (error) {
+            this.error = error;
+        } finally {
+            this.updating = false;
+        }
+    }
+
+    refreshAccounts() {
+        // Force refresh the wired data
+        refreshApex(this.wiredAccounts);
+    }
+}
+  </code></pre>
+
+  <h2>8. Best Practices</h2>
+
+  <h3>For @wire:</h3>
+  <ul>
+    <li>Use <code>cacheable=true</code> for improved performance</li>
+    <li>Use <code>$propertyName</code> for reactive parameters</li>
+    <li>Always handle error state in HTML</li>
+    <li>Keep Apex methods simple and focused on queries</li>
+  </ul>
+
+  <h3>For Imperative:</h3>
+  <ul>
+    <li>Use async/await for cleaner code</li>
+    <li>Always handle errors with try/catch</li>
+    <li>Show loading states during operations</li>
+    <li>Use refreshApex() to update @wire data after mutations</li>
+  </ul>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use <strong>@wire</strong> for automatic, reactive data fetching</li>
+    <li>Use <strong>imperative</strong> for mutations and manual control</li>
+    <li>@wire benefits from caching when marked <code>cacheable=true</code></li>
+    <li>Combine both for read-heavy components with occasional mutations</li>
+    <li>Always handle loading and error states</li>
+    <li>Use refreshApex() to sync @wire and imperative data</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

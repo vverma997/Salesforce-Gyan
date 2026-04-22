@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Real Project Example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Real Project Example – Build a Small LWC Dashboard</h1>
+
+  <p>
+    This post walks through a small dashboard example that combines records, a filter, and a summary card using LWC.
+  </p>
+
+  <h2>1. Dashboard Requirements</h2>
+
+  <ul>
+    <li>Show top accounts by annual revenue</li>
+    <li>Allow filtering by industry</li>
+    <li>Display summary cards for key metrics</li>
+  </ul>
+
+  <h2>2. Apex Controller</h2>
+
+  <pre><code>
+public with sharing class DashboardController {
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getTopAccounts(String industry) {
+        String query = 'SELECT Id, Name, AnnualRevenue, Industry FROM Account ' +
+                       'WHERE AnnualRevenue != NULL ' +
+                       (industry != null ? 'AND Industry = :industry ' : '') +
+                       'ORDER BY AnnualRevenue DESC LIMIT 10';
+        return Database.query(query);
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static Map<String, Decimal> getSummaryMetrics() {
+        Map<String, Decimal> metrics = new Map<String, Decimal>();
+        metrics.put('totalAccounts', [SELECT COUNT() FROM Account]);
+        metrics.put('totalRevenue', [SELECT SUM(AnnualRevenue) total FROM Account].get('total'));
+        return metrics;
+    }
+}
+  </code></pre>
+
+  <h2>3. Component JavaScript</h2>
+
+  <pre><code>
+import { LightningElement, track, wire } from 'lwc';
+import getTopAccounts from '@salesforce/apex/DashboardController.getTopAccounts';
+import getSummaryMetrics from '@salesforce/apex/DashboardController.getSummaryMetrics';
+
+export default class AccountDashboard extends LightningElement {
+    @track industry = '';
+    @track accounts = [];
+    @track summary = {};
+    @track error;
+
+    @wire(getSummaryMetrics)
+    wiredSummary({ error, data }) {
+        if (data) {
+            this.summary = data;
+        } else if (error) {
+            this.error = error;
+        }
+    }
+
+    @wire(getTopAccounts, { industry: '$industry' })
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+        }
+    }
+
+    handleIndustryChange(event) {
+        this.industry = event.target.value;
+    }
+}
+  </code></pre>
+
+  <h2>4. Component Template</h2>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;section class="dashboard"&gt;
+        &lt;div class="summary-cards"&gt;
+            &lt;div class="summary-card"&gt;
+                &lt;h3&gt;Accounts&lt;/h3&gt;
+                &lt;p&gt;{summary.totalAccounts}&lt;/p&gt;
+            &lt;/div&gt;
+            &lt;div class="summary-card"&gt;
+                &lt;h3&gt;Total Revenue&lt;/h3&gt;
+                &lt;p&gt;{summary.totalRevenue}&lt;/p&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div class="filters"&gt;
+            &lt;lightning-combobox
+                label="Industry"
+                options={industryOptions}
+                value={industry}
+                onchange={handleIndustryChange}
+            &gt;&lt;/lightning-combobox&gt;
+        &lt;/div&gt;
+
+        &lt;div class="table-container"&gt;
+            &lt;table class="slds-table slds-table_cell-buffer slds-table_bordered"&gt;
+                &lt;thead&gt;
+                    &lt;tr&gt;
+                        &lt;th&gt;Name&lt;/th&gt;
+                        &lt;th&gt;Industry&lt;/th&gt;
+                        &lt;th&gt;Annual Revenue&lt;/th&gt;
+                    &lt;/tr&gt;
+                &lt;/thead&gt;
+                &lt;tbody&gt;
+                    &lt;template for:each={accounts} for:item="account"&gt;
+                        &lt;tr key={account.Id}&gt;
+                            &lt;td&gt;{account.Name}&lt;/td&gt;
+                            &lt;td&gt;{account.Industry}&lt;/td&gt;
+                            &lt;td&gt;{account.AnnualRevenue}&lt;/td&gt;
+                        &lt;/tr&gt;
+                    &lt;/template&gt;
+                &lt;/tbody&gt;
+            &lt;/table&gt;
+        &lt;/div&gt;
+
+        &lt;template if:true={error}&gt;
+            &lt;div class="error"&gt;Error loading dashboard&lt;/div&gt;
+        &lt;/template&gt;
+    &lt;/section&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>5. Dashboard Best Practices</h2>
+
+  <ul>
+    <li>Use cacheable Apex for summary and list data</li>
+    <li>Apply filters to wire parameters for reactive updates</li>
+    <li>Keep the dashboard responsive and lightweight</li>
+    <li>Use SLDS classes for consistent layout</li>
+    <li>Show errors and loading states clearly</li>
+  </ul>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Build dashboards by combining summary cards and list data</li>
+    <li>Use wired Apex for reactive refresh on filter changes</li>
+    <li>Cache static metrics with <code>cacheable=true</code></li>
+    <li>Prefer LDS for record UIs, but use Apex for aggregated dashboards</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

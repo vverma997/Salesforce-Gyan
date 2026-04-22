@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Apex Trigger Guide</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../tools.html">Tools</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Apex Trigger Guide — My First Post</h1>
+
+  <p>
+    Hey everyone, this is my first post here. I thought I’d start with something simple but super useful — Apex Triggers.
+    If you're getting into Salesforce development, this is one of those things you'll see everywhere.
+  </p>
+
+  <p>
+    In simple terms, a trigger is just code that runs automatically when data changes. You create or update a record,
+    and the trigger fires in the background. No button clicks, no manual steps.
+  </p>
+
+  <h2>Example Trigger</h2>
+
+  <pre><code>
+trigger AccountErrorTrigger on Account (before insert, before update) {
+    for (Account acc : Trigger.new) {
+        if (acc.Name != null && acc.Name.contains('ERROR')) {
+            acc.addError('Name cannot contain ERROR');
+        }
+    }
+}
+  </code></pre>
+
+  <p>
+    What this does is pretty straightforward. Before saving an Account, it checks the name.
+    If someone tries to use the word "ERROR" in the name, Salesforce blocks the save and shows a message.
+  </p>
+
+  <p>
+    For example, if a user tries to create something like <b>Test ERROR Company</b>, it simply won’t go through.
+    This helps keep bad or unwanted data out of the system.
+  </p>
+
+  <h2>A small improvement</h2>
+
+  <p>
+    In real projects, I usually don’t keep all logic directly inside the trigger. Even for simple checks,
+    it’s better to keep things cleaner and reusable.
+  </p>
+
+  <pre><code>
+trigger AccountValidationTrigger on Account (before insert, before update) {
+    AccountValidationHandler.validateAccounts(Trigger.new);
+}
+  </code></pre>
+
+  <pre><code>
+public class AccountValidationHandler {
+    public static void validateAccounts(List&lt;Account&gt; accounts) {
+        for (Account acc : accounts) {
+            if (acc.Name != null && acc.Name.toLowerCase().contains('error')) {
+                acc.addError('Please avoid using restricted words like "ERROR" in the name.');
+            }
+        }
+    }
+}
+  </code></pre>
+
+  <p>
+    Same logic, just structured in a cleaner way so it’s easier to extend later.
+  </p>
+
+  <h2>One thing to remember</h2>
+
+  <p>
+    Always assume multiple records, not just one. Even if you're testing with a single record,
+    Salesforce can process data in bulk behind the scenes.
+  </p>
+
+  <p>
+    That’s why you’ll always see loops like <code>for (Account acc : Trigger.new)</code>.
+  </p>
+
+  <p>
+    That’s it for this post. Keeping it simple for now. Next, I’ll probably cover when to use before vs after triggers
+    and how things look in real projects.
+  </p>
+
+  <a href="../../../apex.html" class="back-link">← Back to Apex</a>
+
+</div>
+
+</body>
+</html>

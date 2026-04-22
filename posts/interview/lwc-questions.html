@@ -1,0 +1,2590 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LWC Interview Questions</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../interview.html">Interview</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>LWC Interview Questions – Real Scenario Practice</h1>
+
+  <p>
+    Prepare for LWC interviews with practical, scenario-based questions that test both component concepts and problem-solving skills.
+  </p>
+
+  <h2>1. Scenario: Parent-Child Communication with Data Updates</h2>
+
+  <p>
+    <strong>Question:</strong> You have a parent component that displays a list of accounts. When a user clicks an account, a child component should display its details. If the user edits the details in the child, the parent list should update. How would you implement this?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use @api property for parent-to-child and event dispatch for child-to-parent:
+  </p>
+
+  <pre><code>
+// Parent Component
+import { LightningElement, track, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountList extends LightningElement {
+    @track selectedAccount;
+    @track accounts;
+
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+        }
+    }
+
+    handleSelectAccount(event) {
+        const accountId = event.currentTarget.dataset.id;
+        this.selectedAccount = this.accounts.find(acc => acc.Id === accountId);
+    }
+
+    handleAccountUpdate(event) {
+        const updatedAccount = event.detail;
+        const index = this.accounts.findIndex(acc => acc.Id === updatedAccount.Id);
+        if (index > -1) {
+            this.accounts[index] = { ...updatedAccount };
+            this.accounts = [...this.accounts];  // Trigger reactivity
+        }
+        this.selectedAccount = null;
+    }
+}
+  </code></pre>
+
+  <pre><code>
+// Child Component
+import { LightningElement, api } from 'lwc';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class AccountDetails extends LightningElement {
+    @api account;
+    @api
+    accountName;
+
+    handleSave() {
+        updateAccount({ accountId: this.account.Id, accountName: this.accountName })
+            .then(() => {
+                this.dispatchEvent(new CustomEvent('accountupdated', {
+                    detail: { ...this.account, Name: this.accountName }
+                }));
+            });
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>@api</code> to receive data from parent</li>
+    <li>Use <code>dispatchEvent</code> with <code>CustomEvent</code> to send data to parent</li>
+    <li>Create a new array reference to trigger parent component reactivity</li>
+    <li>Handle async responses before dispatching events</li>
+  </ul>
+
+  <h2>2. Scenario: Handling Conditional Rendering Based on User Role</h2>
+
+  <p>
+    <strong>Question:</strong> Your component needs to show different UI elements based on the user's role. Admins see all data, managers see their team's data, and regular users see only their own data. How do you implement this?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use sharing rules and conditional rendering:
+  </p>
+
+  <pre><code>
+import { LightningElement, track, wire } from 'lwc';
+import { isGuest } from 'lightning/platformShowToastEvent';
+import getUserInfo from '@salesforce/apex/UserController.getUserInfo';
+import getRecordsForUser from '@salesforce/apex/RecordController.getRecordsForUser';
+
+export default class RoleBasedView extends LightningElement {
+    @track userRole;
+    @track records = [];
+    @track isAdmin = false;
+    @track isManager = false;
+
+    @wire(getUserInfo)
+    wiredUserInfo({ data, error }) {
+        if (data) {
+            this.userRole = data.UserRole.Name;
+            this.isAdmin = this.userRole.includes('Admin');
+            this.isManager = this.userRole.includes('Manager');
+        }
+    }
+
+    @wire(getRecordsForUser, { userRole: '$userRole' })
+    wiredRecords({ data, error }) {
+        if (data) {
+            this.records = data;
+        }
+    }
+
+    get hasAdminAccess() {
+        return this.isAdmin;
+    }
+
+    get hasManagerAccess() {
+        return this.isManager;
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-card title="Records"&gt;
+        &lt;!-- Admin view --&gt;
+        &lt;template if:true={hasAdminAccess}&gt;
+            &lt;lightning-datatable
+                key-field="Id"
+                data={records}
+                columns={allColumns}
+            &gt;&lt;/lightning-datatable&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Manager view --&gt;
+        &lt;template if:true={hasManagerAccess}&gt;
+            &lt;lightning-datatable
+                key-field="Id"
+                data={records}
+                columns={teamColumns}
+            &gt;&lt;/lightning-datatable&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Regular user view --&gt;
+        &lt;template if:false={hasAdminAccess}&gt;
+            &lt;template if:false={hasManagerAccess}&gt;
+                &lt;lightning-card title="My Records"&gt;
+                    &lt;lightning-datatable
+                        key-field="Id"
+                        data={records}
+                        columns={userColumns}
+                    &gt;&lt;/lightning-datatable&gt;
+                &lt;/lightning-card&gt;
+            &lt;/template&gt;
+        &lt;/template&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use getter methods to simplify conditional logic in templates</li>
+    <li>Fetch user role via Apex with <code>with sharing</code> keyword</li>
+    <li>Use <code>if:true</code> and <code>if:false</code> for role-based rendering</li>
+    <li>Return different data sets based on role from Apex</li>
+  </ul>
+
+  <h2>3. Scenario: Handling Form Validation and Error Messages</h2>
+
+  <p>
+    <strong>Question:</strong> You need to build a form that validates email, phone, and required fields before submission. If validation fails, show inline error messages. How do you implement this?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use validation handlers and showToastEvent:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import saveContact from '@salesforce/apex/ContactController.saveContact';
+
+export default class ContactForm extends LightningElement {
+    @track contact = {
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: ''
+    };
+    @track errors = {};
+    @track isLoading = false;
+
+    handleInputChange(event) {
+        const field = event.target.name;
+        this.contact[field] = event.target.value;
+        this.errors[field] = this.validateField(field, this.contact[field]);
+    }
+
+    validateField(field, value) {
+        const errors = {};
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^\d{10}$/;
+
+        switch (field) {
+            case 'firstName':
+            case 'lastName':
+                if (!value || value.trim() === '') {
+                    return field + ' is required';
+                }
+                break;
+            case 'email':
+                if (!value || !emailRegex.test(value)) {
+                    return 'Enter a valid email address';
+                }
+                break;
+            case 'phone':
+                if (value && !phoneRegex.test(value.replace(/\D/g, ''))) {
+                    return 'Phone must be 10 digits';
+                }
+                break;
+        }
+        return '';
+    }
+
+    handleSubmit() {
+        // Validate all fields
+        let hasErrors = false;
+        for (const field in this.contact) {
+            const error = this.validateField(field, this.contact[field]);
+            if (error) {
+                this.errors[field] = error;
+                hasErrors = true;
+            }
+        }
+
+        if (hasErrors) {
+            this.showToast('Validation Error', 'Please fix all errors', 'error');
+            return;
+        }
+
+        this.isLoading = true;
+        saveContact({ contact: this.contact })
+            .then(() => {
+                this.showToast('Success', 'Contact saved', 'success');
+                this.resetForm();
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    resetForm() {
+        this.contact = {
+            firstName: '',
+            lastName: '',
+            email: '',
+            phone: ''
+        };
+        this.errors = {};
+    }
+
+    showToast(title, message, variant) {
+        this.dispatchEvent(
+            new ShowToastEvent({
+                title,
+                message,
+                variant,
+                mode: 'dismissable'
+            })
+        );
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-card title="Contact Form"&gt;
+        &lt;div class="slds-p-around_medium"&gt;
+            &lt;lightning-input
+                type="text"
+                name="firstName"
+                label="First Name"
+                value={contact.firstName}
+                onchange={handleInputChange}
+                message-when-bad-input={errors.firstName}
+            &gt;&lt;/lightning-input&gt;
+
+            &lt;lightning-input
+                type="text"
+                name="lastName"
+                label="Last Name"
+                value={contact.lastName}
+                onchange={handleInputChange}
+                message-when-bad-input={errors.lastName}
+            &gt;&lt;/lightning-input&gt;
+
+            &lt;lightning-input
+                type="email"
+                name="email"
+                label="Email"
+                value={contact.email}
+                onchange={handleInputChange}
+                message-when-bad-input={errors.email}
+            &gt;&lt;/lightning-input&gt;
+
+            &lt;lightning-input
+                type="tel"
+                name="phone"
+                label="Phone"
+                value={contact.phone}
+                onchange={handleInputChange}
+                message-when-bad-input={errors.phone}
+            &gt;&lt;/lightning-input&gt;
+
+            &lt;lightning-button
+                variant="brand"
+                label={isLoading ? 'Saving...' : 'Submit'}
+                onclick={handleSubmit}
+                disabled={isLoading}
+            &gt;&lt;/lightning-button&gt;
+        &lt;/div&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Create validation functions that return error messages</li>
+    <li>Use <code>message-when-bad-input</code> on inputs to show inline errors</li>
+    <li>Use <code>ShowToastEvent</code> to display toast notifications</li>
+    <li>Validate all fields before submitting</li>
+  </ul>
+
+  <h2>4. Scenario: Fetching Data with Wire vs Imperative</h2>
+
+  <p>
+    <strong>Question:</strong> You have a search box that should fetch accounts based on user input. Should you use @wire or imperative Apex? Why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>imperative</code> for user-triggered searches:
+  </p>
+
+  <pre><code>
+// ❌ WASTEFUL: @wire with parameter
+@wire(searchAccounts, { searchTerm: '$searchTerm' })
+wiredAccounts;
+
+// ✅ BETTER: Imperative call on user input
+import { LightningElement, track } from 'lwc';
+import searchAccounts from '@salesforce/apex/AccountController.searchAccounts';
+
+export default class AccountSearch extends LightningElement {
+    @track searchTerm = '';
+    @track results = [];
+    @track isLoading = false;
+
+    handleSearch(event) {
+        this.searchTerm = event.target.value;
+
+        if (this.searchTerm.length < 2) {
+            this.results = [];
+            return;
+        }
+
+        this.isLoading = true;
+        searchAccounts({ searchTerm: this.searchTerm })
+            .then(data => {
+                this.results = data;
+            })
+            .catch(error => {
+                console.error('Search failed:', error);
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>@wire</code> for data that changes reactively and loads on component init</li>
+    <li>Use <code>imperative</code> for user-triggered actions (search, filter, pagination)</li>
+    <li>Show loading state while fetching data</li>
+    <li>Handle errors gracefully</li>
+  </ul>
+
+  <h2>5. Scenario: Performance Optimization with Lazy Loading</h2>
+
+  <p>
+    <strong>Question:</strong> Your component displays a list of 1000+ records with pagination. The page loads slowly. How do you optimize?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use pagination with lazy loading:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import getRecords from '@salesforce/apex/RecordController.getRecords';
+
+export default class LazyLoadList extends LightningElement {
+    @track records = [];
+    @track pageNumber = 1;
+    @track pageSize = 20;
+    @track totalRecords = 0;
+    @track isLoading = false;
+
+    connectedCallback() {
+        this.loadRecords();
+    }
+
+    loadRecords() {
+        this.isLoading = true;
+        getRecords({
+            pageNumber: this.pageNumber,
+            pageSize: this.pageSize
+        })
+            .then(data => {
+                this.records = data.records;
+                this.totalRecords = data.totalCount;
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    handleNextPage() {
+        this.pageNumber++;
+        this.loadRecords();
+    }
+
+    handlePreviousPage() {
+        if (this.pageNumber > 1) {
+            this.pageNumber--;
+            this.loadRecords();
+        }
+    }
+
+    get hasNextPage() {
+        return (this.pageNumber * this.pageSize) < this.totalRecords;
+    }
+
+    get hasPreviousPage() {
+        return this.pageNumber > 1;
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Fetch only the records needed for the current page</li>
+    <li>Use pagination buttons to navigate</li>
+    <li>Reduce DOM elements – don't render all records at once</li>
+    <li>Show loading state during fetch</li>
+  </ul>
+
+  <h2>6. Scenario: @Wire for Reactive Data vs Imperative for User Actions</h2>
+
+  <p>
+    <strong>Question:</strong> You need to show data from Apex on load and refresh automatically when the record changes. Do you use @wire or imperative call, and why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>@wire</code> for reactive auto-refresh, and <code>imperative</code> for user-triggered actions:
+  </p>
+
+  <pre><code>
+import { LightningElement, api, wire, track } from 'lwc';
+import getAccountDetails from '@salesforce/apex/AccountController.getAccountDetails';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class AccountViewer extends LightningElement {
+    @api recordId;
+    @track accountData;
+    @track isEditing = false;
+
+    // ✅ Use @wire for reactive, auto-refreshing data
+    @wire(getAccountDetails, { recordId: '$recordId' })
+    wiredAccount({ error, data }) {
+        if (data) {
+            this.accountData = data;
+        } else if (error) {
+            console.error('Error loading account:', error);
+        }
+    }
+
+    // ❌ Don't use @wire for user-triggered actions
+    // @wire(updateAccount, { data: '$editedData' })
+    // wiredUpdate;
+
+    // ✅ Instead, use imperative for manual actions
+    handleEdit() {
+        this.isEditing = true;
+    }
+
+    handleSave() {
+        updateAccount({ accountData: this.accountData })
+            .then(() => {
+                // After save, @wire automatically refreshes the data
+                // due to recordId change or use refreshApex
+                this.isEditing = false;
+            })
+            .catch(error => {
+                console.error('Save failed:', error);
+            });
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>@wire</code> – Auto-refreshes when dependencies change; great for load-on-init data</li>
+    <li><code>Imperative</code> – User controls when data fetches; better for search, filters, pagination</li>
+    <li>Combine both for best UX: load data with @wire, update with imperative</li>
+    <li>@wire auto-refreshes when its reactive parameters (like $recordId) change</li>
+  </ul>
+
+  <h2>7. Scenario: Bidirectional Parent-Child Communication</h2>
+
+  <p>
+    <strong>Question:</strong> Parent component needs to pass data to child and get response back. How do you handle communication both ways?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>@api</code> properties and custom events:
+  </p>
+
+  <pre><code>
+// Parent Component
+import { LightningElement, track } from 'lwc';
+
+export default class ParentAccount extends LightningElement {
+    @track selectedAccount = null;
+    @track accounts = [
+        { Id: '1', Name: 'Acme Corp' },
+        { Id: '2', Name: 'Tech Inc' }
+    ];
+
+    handleSelectAccount(event) {
+        const accountId = event.currentTarget.dataset.id;
+        this.selectedAccount = this.accounts.find(acc => acc.Id === accountId);
+    }
+
+    handleChildSave(event) {
+        const updatedAccount = event.detail;
+        const index = this.accounts.findIndex(acc => acc.Id === updatedAccount.Id);
+        if (index > -1) {
+            this.accounts[index] = updatedAccount;
+        }
+    }
+
+    handleChildCancel() {
+        this.selectedAccount = null;
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Parent Template --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Accounts"&gt;
+        &lt;div class="slds-p-around_medium"&gt;
+            &lt;template for:each={accounts} for:item="acc"&gt;
+                &lt;lightning-button 
+                    key={acc.Id}
+                    label={acc.Name}
+                    onclick={handleSelectAccount}
+                    data-id={acc.Id}
+                &gt;&lt;/lightning-button&gt;
+            &lt;/template&gt;
+        &lt;/div&gt;
+    &lt;/lightning-card&gt;
+
+    &lt;template if:true={selectedAccount}&gt;
+        &lt;c-account-editor 
+            account={selectedAccount}
+            onsave={handleChildSave}
+            oncancel={handleChildCancel}
+        &gt;&lt;/c-account-editor&gt;
+    &lt;/template&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <pre><code>
+// Child Component
+import { LightningElement, api } from 'lwc';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class AccountEditor extends LightningElement {
+    @api account;
+    accountName;
+
+    connectedCallback() {
+        this.accountName = this.account.Name;
+    }
+
+    handleInputChange(event) {
+        this.accountName = event.target.value;
+    }
+
+    handleSave() {
+        updateAccount({ 
+            accountId: this.account.Id, 
+            accountName: this.accountName 
+        })
+            .then(() => {
+                const updatedAccount = { ...this.account, Name: this.accountName };
+                this.dispatchEvent(new CustomEvent('save', {
+                    detail: updatedAccount
+                }));
+            });
+    }
+
+    handleCancel() {
+        this.dispatchEvent(new CustomEvent('cancel'));
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>@api</code> – Parent passes data (one-way down)</li>
+    <li><code>dispatchEvent(CustomEvent)</code> – Child sends data back to parent</li>
+    <li>Parent listens with <code>onsave={handleChildSave}</code></li>
+    <li>Always include bubble, composed, and cancelable options if needed</li>
+  </ul>
+
+  <h2>8. Scenario: Performance Optimization with Caching</h2>
+
+  <p>
+    <strong>Question:</strong> A component is slow because of repeated server calls. How do you optimize performance?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use caching and memoization:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import getRecords from '@salesforce/apex/RecordController.getRecords';
+
+export default class OptimizedRecordList extends LightningElement {
+    @track records = [];
+    @track isLoading = false;
+    recordCache = new Map();  // Cache records by filter
+
+    handleFilterChange(event) {
+        const filter = event.target.value;
+
+        // Check cache first
+        if (this.recordCache.has(filter)) {
+            this.records = this.recordCache.get(filter);
+            return;
+        }
+
+        // Fetch only if not in cache
+        this.isLoading = true;
+        getRecords({ filter })
+            .then(data => {
+                this.records = data;
+                this.recordCache.set(filter, data);  // Store in cache
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    // Add debounce for search to prevent multiple calls
+    handleSearch(event) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.handleFilterChange(event);
+        }, 300);
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use a Map or object to cache API responses</li>
+    <li>Check cache before making API calls</li>
+    <li>Use debouncing for search/input to prevent excessive calls</li>
+    <li>Use <code>@wire(cacheable=true)</code> in Apex for built-in caching</li>
+  </ul>
+
+  <h2>9. Scenario: Loading Spinner and Error Handling</h2>
+
+  <p>
+    <strong>Question:</strong> You need to show a spinner while loading and handle API errors gracefully. How would you design it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use loading state and error messages:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountListWithSpinner extends LightningElement {
+    @track accounts = [];
+    @track isLoading = false;
+    @track error = '';
+
+    connectedCallback() {
+        this.loadAccounts();
+    }
+
+    loadAccounts() {
+        this.isLoading = true;
+        this.error = '';
+
+        getAccounts()
+            .then(data => {
+                this.accounts = data;
+                this.error = '';
+            })
+            .catch(error => {
+                this.error = this.getErrorMessage(error);
+                this.showErrorToast(this.error);
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    getErrorMessage(error) {
+        if (error.body && error.body.message) {
+            return error.body.message;
+        }
+        return 'An unexpected error occurred';
+    }
+
+    showErrorToast(message) {
+        this.dispatchEvent(new ShowToastEvent({
+            title: 'Error',
+            message,
+            variant: 'error'
+        }));
+    }
+
+    handleRetry() {
+        this.loadAccounts();
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Template with Spinner and Error Handling --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Accounts"&gt;
+        &lt;!-- Spinner while loading --&gt;
+        &lt;template if:true={isLoading}&gt;
+            &lt;div class="slds-p-around_medium"&gt;
+                &lt;lightning-spinner alternative-text="Loading..."&gt;&lt;/lightning-spinner&gt;
+            &lt;/div&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Error message with retry button --&gt;
+        &lt;template if:true={error}&gt;
+            &lt;div class="slds-p-around_medium slds-box slds-theme_alert-texture slds-theme_error"&gt;
+                &lt;p&gt;{error}&lt;/p&gt;
+                &lt;lightning-button 
+                    label="Retry"
+                    variant="brand"
+                    onclick={handleRetry}
+                &gt;&lt;/lightning-button&gt;
+            &lt;/div&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Data table when loaded --&gt;
+        &lt;template if:true={accounts}&gt;
+            &lt;template if:false={isLoading}&gt;
+                &lt;lightning-datatable
+                    key-field="Id"
+                    data={accounts}
+                    columns={columns}
+                &gt;&lt;/lightning-datatable&gt;
+            &lt;/template&gt;
+        &lt;/template&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Track loading state and show <code>lightning-spinner</code> during fetch</li>
+    <li>Handle errors and show user-friendly messages</li>
+    <li>Provide a retry button to attempt the operation again</li>
+    <li>Use <code>finally()</code> to always reset loading state</li>
+  </ul>
+
+  <h2>10. Scenario: Fixing Reactivity Issues</h2>
+
+  <p>
+    <strong>Question:</strong> Data is not updating in UI after Apex call. What could be wrong and how do you fix reactivity issues?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> LWC uses shallow equality checks. Create new references for objects and arrays:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import updateAccount from '@salesforce/apex/AccountController.updateAccount';
+
+export default class ReactivityExample extends LightningElement {
+    @track account = { Id: '123', Name: 'Acme' };
+    @track accountList = [{ Id: '1', Name: 'Client A' }];
+
+    // ❌ WRONG: Direct mutation doesn't trigger reactivity
+    handleUpdateWrong() {
+        this.account.Name = 'Updated Name';  // No reactivity!
+        this.accountList[0].Name = 'New Name';  // No reactivity!
+    }
+
+    // ✅ CORRECT: Create new references
+    handleUpdateCorrect() {
+        // For objects: spread operator
+        this.account = { ...this.account, Name: 'Updated Name' };
+
+        // For arrays: create new array
+        this.accountList = [
+            { ...this.accountList[0], Name: 'New Name' },
+            ...this.accountList.slice(1)
+        ];
+    }
+
+    // ✅ BETTER: After Apex call, refresh data
+    async handleSaveAndRefresh() {
+        try {
+            await updateAccount({ accountData: this.account });
+            // Refresh by creating new instance
+            this.account = { ...this.account };
+        } catch (error) {
+            console.error('Save failed:', error);
+        }
+    }
+
+    // ✅ FOR NESTED OBJECTS
+    handleUpdateNested() {
+        const updatedAccount = {
+            ...this.account,
+            details: {
+                ...this.account.details,
+                phone: '555-1234'
+            }
+        };
+        this.account = updatedAccount;
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>LWC uses shallow equality – direct mutations don't trigger updates</li>
+    <li>For objects: use spread operator <code>{ ...object, field: value }</code></li>
+    <li>For arrays: create new array with <code>[...array]</code> or <code>array.slice()</code></li>
+    <li>For nested objects: spread at each level</li>
+  </ul>
+
+  <h2>11. Scenario: Building Reusable Components</h2>
+
+  <p>
+    <strong>Question:</strong> You need to build a reusable component used across multiple pages. How do you design it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>@api</code> properties to make components flexible:
+  </p>
+
+  <pre><code>
+// Reusable DataTable Component
+import { LightningElement, api, track } from 'lwc';
+
+export default class ReusableDataTable extends LightningElement {
+    @api title = 'Data';
+    @api columnConfig = [];  // Accept column config from parent
+    @api recordData = [];    // Accept data from parent
+    @api pageSize = 10;
+    @api allowEdit = false;
+    @api allowDelete = false;
+
+    @track currentPage = 1;
+
+    connectedCallback() {
+        // Validate inputs
+        if (!this.columnConfig || this.columnConfig.length === 0) {
+            console.warn('DataTable: columnConfig is required');
+        }
+    }
+
+    get paginatedData() {
+        const start = (this.currentPage - 1) * this.pageSize;
+        const end = start + this.pageSize;
+        return this.recordData.slice(start, end);
+    }
+
+    handleEdit(event) {
+        const recordId = event.detail;
+        this.dispatchEvent(new CustomEvent('edit', { detail: recordId }));
+    }
+
+    handleDelete(event) {
+        const recordId = event.detail;
+        this.dispatchEvent(new CustomEvent('delete', { detail: recordId }));
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Reusable DataTable Template --&gt;
+&lt;template&gt;
+    &lt;lightning-card title={title}&gt;
+        &lt;lightning-datatable
+            key-field="Id"
+            data={paginatedData}
+            columns={columnConfig}
+            hide-checkbox-column
+        &gt;&lt;/lightning-datatable&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <pre><code>
+// Parent: Using Reusable Component
+import { LightningElement, track } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountDashboard extends LightningElement {
+    @track accounts = [];
+    columnConfig = [
+        { label: 'Name', fieldName: 'Name', type: 'text' },
+        { label: 'Industry', fieldName: 'Industry', type: 'text' },
+        { label: 'Phone', fieldName: 'Phone', type: 'phone' }
+    ];
+
+    connectedCallback() {
+        getAccounts().then(data => {
+            this.accounts = data;
+        });
+    }
+
+    handleEdit(event) {
+        const recordId = event.detail;
+        console.log('Editing:', recordId);
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Parent Template Using Reusable Component --&gt;
+&lt;template&gt;
+    &lt;c-reusable-data-table
+        title="All Accounts"
+        record-data={accounts}
+        column-config={columnConfig}
+        page-size="20"
+        allow-edit="true"
+        onedit={handleEdit}
+    &gt;&lt;/c-reusable-data-table&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>@api</code> properties to accept configuration from parent</li>
+    <li>Set sensible defaults for <code>@api</code> properties</li>
+    <li>Dispatch custom events to communicate actions back to parent</li>
+    <li>Document all <code>@api</code> properties with JSDoc comments</li>
+  </ul>
+
+  <h2>12. Scenario: Using Key Directive for List Rendering</h2>
+
+  <p>
+    <strong>Question:</strong> A list renders incorrectly after update. How do you use key in template for rerendering?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>key</code> attribute in <code>for:each</code> loops:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+
+export default class TodoList extends LightningElement {
+    @track todos = [
+        { id: '1', title: 'Task 1', completed: false },
+        { id: '2', title: 'Task 2', completed: false }
+    ];
+
+    handleAddTodo() {
+        const newTodo = {
+            id: Date.now().toString(),
+            title: 'New Task',
+            completed: false
+        };
+        this.todos = [...this.todos, newTodo];
+    }
+
+    handleToggleTodo(event) {
+        const todoId = event.currentTarget.dataset.id;
+        const index = this.todos.findIndex(t => t.id === todoId);
+        if (index > -1) {
+            // Create new array to trigger reactivity
+            this.todos = [
+                ...this.todos.slice(0, index),
+                { ...this.todos[index], completed: !this.todos[index].completed },
+                ...this.todos.slice(index + 1)
+            ];
+        }
+    }
+
+    handleDeleteTodo(event) {
+        const todoId = event.currentTarget.dataset.id;
+        this.todos = this.todos.filter(t => t.id !== todoId);
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Template with Proper Key --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Todos"&gt;
+        &lt;!-- ❌ DON'T: Use index as key --&gt;
+        &lt;!-- &lt;template for:each={todos} for:item="todo" for:index="index"&gt;
+            &lt;li key={index}&gt;...&lt;/li&gt;
+        &lt;/template&gt; --&gt;
+
+        &lt;!-- ✅ DO: Use unique identifier --&gt;
+        &lt;ul&gt;
+            &lt;template for:each={todos} for:item="todo"&gt;
+                &lt;li key={todo.id} data-id={todo.id}&gt;
+                    &lt;span class={completedClass}&gt;{todo.title}&lt;/span&gt;
+                    &lt;lightning-button
+                        variant="bare"
+                        icon-name="utility:check"
+                        onclick={handleToggleTodo}
+                        data-id={todo.id}
+                    &gt;&lt;/lightning-button&gt;
+                    &lt;lightning-button
+                        variant="bare"
+                        icon-name="utility:delete"
+                        onclick={handleDeleteTodo}
+                        data-id={todo.id}
+                    &gt;&lt;/lightning-button&gt;
+                &lt;/li&gt;
+            &lt;/template&gt;
+        &lt;/ul&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Always use a unique <code>key</code> attribute in <code>for:each</code></li>
+    <li>Never use array index as key – causes re-render bugs when list changes</li>
+    <li>Use Id or other unique identifiers</li>
+    <li>Key helps LWC identify which items have changed, been added, or removed</li>
+  </ul>
+
+  <h2>13. Scenario: Permission-Based UI Rendering</h2>
+
+  <p>
+    <strong>Question:</strong> You must restrict UI based on user permissions. How do you handle security in LWC?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Check permissions before rendering sensitive UI:
+  </p>
+
+  <pre><code>
+import { LightningElement, track, wire } from 'lwc';
+import { getRecord, getFieldValue } from 'lightning/uiRecordApi';
+import Id from '@salesforce/user/Id';
+import getUserPermissions from '@salesforce/apex/UserController.getUserPermissions';
+
+const FIELDS = ['Account.Id', 'Account.Name'];
+
+export default class PermissionBasedView extends LightningElement {
+    userId = Id;
+    @track account;
+    @track userPermissions = {};
+
+    @wire(getRecord, { recordId: '$recordId', fields: FIELDS })
+    wiredRecord({ data, error }) {
+        if (data) {
+            this.account = data;
+        }
+    }
+
+    @wire(getUserPermissions)
+    wiredPermissions({ data, error }) {
+        if (data) {
+            this.userPermissions = {
+                canRead: data.canReadAccounts,
+                canEdit: data.canEditAccounts,
+                canDelete: data.canDeleteAccounts,
+                isAdmin: data.isAdmin
+            };
+        }
+    }
+
+    get canEditAccount() {
+        return this.userPermissions.canEdit;
+    }
+
+    get canDeleteAccount() {
+        return this.userPermissions.canDelete;
+    }
+
+    handleEdit() {
+        if (!this.canEditAccount) {
+            alert('You do not have permission to edit this record');
+            return;
+        }
+        // Proceed with edit
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- Template with Permission Checks --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Account Details"&gt;
+        &lt;template if:true={account}&gt;
+            &lt;p&gt;{account.fields.Name.value}&lt;/p&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Only show edit button if user has permission --&gt;
+        &lt;template if:true={canEditAccount}&gt;
+            &lt;lightning-button
+                label="Edit"
+                variant="brand"
+                onclick={handleEdit}
+            &gt;&lt;/lightning-button&gt;
+        &lt;/template&gt;
+
+        &lt;!-- Only show delete button if user is admin --&gt;
+        &lt;template if:true={userPermissions.isAdmin}&gt;
+            &lt;lightning-button
+                label="Delete"
+                variant="destructive"
+                onclick={handleDelete}
+            &gt;&lt;/lightning-button&gt;
+        &lt;/template&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Fetch user permissions from Apex using <code>with sharing</code></li>
+    <li>Check permissions before rendering buttons and actions</li>
+    <li>Always enforce permissions in Apex too – LWC checks are UI only</li>
+    <li>Use <code>lightning-record-edit-form</code> which auto-enforces FLS</li>
+  </ul>
+
+  <h2>14. Scenario: File Upload and Processing</h2>
+
+  <p>
+    <strong>Question:</strong> Need to upload a file and process it in Apex. What approach will you take?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use <code>lightning-file-upload</code> and handle the file in Apex:
+  </p>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import uploadFile from '@salesforce/apex/FileController.uploadFile';
+
+export default class FileUploadExample extends LightningElement {
+    @track uploadedFiles = [];
+
+    handleFileUpload(event) {
+        const files = event.detail.files;
+        
+        if (files.length === 0) return;
+
+        const file = files[0];
+        const reader = new FileReader();
+
+        reader.onload = () => {
+            const fileContent = reader.result;
+            const base64 = this.getBase64(fileContent);
+
+            // Call Apex to process file
+            uploadFile({
+                fileName: file.name,
+                fileContent: base64,
+                fileType: file.type
+            })
+                .then(result => {
+                    this.uploadedFiles = [
+                        ...this.uploadedFiles,
+                        { name: file.name, recordId: result }
+                    ];
+                    this.showToast('Success', 'File uploaded', 'success');
+                })
+                .catch(error => {
+                    this.showToast('Error', error.body.message, 'error');
+                });
+        };
+
+        reader.readAsDataURL(file);
+    }
+
+    getBase64(fileContent) {
+        return fileContent.split(',')[1];  // Remove data:image/png;base64, prefix
+    }
+
+    showToast(title, message, variant) {
+        this.dispatchEvent(new ShowToastEvent({
+            title,
+            message,
+            variant
+        }));
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- File Upload Template --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Upload File"&gt;
+        &lt;lightning-file-upload
+            label="Select File"
+            accept=".csv,.pdf,.xlsx"
+            record-id="account-record"
+            onuploadfinished={handleFileUpload}
+        &gt;&lt;/lightning-file-upload&gt;
+
+        &lt;template if:true={uploadedFiles}&gt;
+            &lt;p&gt;Uploaded Files:&lt;/p&gt;
+            &lt;ul&gt;
+                &lt;template for:each={uploadedFiles} for:item="file"&gt;
+                    &lt;li key={file.recordId}&gt;{file.name}&lt;/li&gt;
+                &lt;/template&gt;
+            &lt;/ul&gt;
+        &lt;/template&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <pre><code>
+// Apex: Process File
+public with sharing class FileController {
+    @AuraEnabled
+    public static String uploadFile(String fileName, String fileContent, String fileType) {
+        ContentVersion cv = new ContentVersion();
+        cv.Title = fileName;
+        cv.VersionData = EncodingUtil.base64Decode(fileContent);
+        cv.IsMajorVersion = true;
+        insert cv;
+
+        ContentDocumentLink cdl = new ContentDocumentLink();
+        cdl.ContentDocumentId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id][0].ContentDocumentId;
+        cdl.LinkedEntityId = UserInfo.getUserId();  // Or your record Id
+        cdl.ShareType = 'V';
+        insert cdl;
+
+        return cv.Id;
+    }
+}
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Use <code>lightning-file-upload</code> component for UI</li>
+    <li>Convert file to base64 before sending to Apex</li>
+    <li>Use ContentVersion and ContentDocumentLink for file storage</li>
+    <li>Validate file type and size in both LWC and Apex</li>
+  </ul>
+
+  <h2>15. Scenario: Sharing Data Across Multiple Components</h2>
+
+  <p>
+    <strong>Question:</strong> Multiple components need same data. Do you call Apex multiple times or use LDS / shared state?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Lightning Data Service or a shared state pattern:
+  </p>
+
+  <pre><code>
+// Approach 1: Use Lightning Data Service (LDS)
+import { LightningElement, api, wire } from 'lwc';
+import { getRecord } from 'lightning/uiRecordApi';
+
+const FIELDS = ['Account.Id', 'Account.Name', 'Account.Phone'];
+
+export default class AccountViewerLDS extends LightningElement {
+    @api recordId;
+
+    // LDS automatically caches data and shares across components
+    @wire(getRecord, { recordId: '$recordId', fields: FIELDS })
+    account;
+}
+  </code></pre>
+
+  <pre><code>
+// Approach 2: Use Shared Data Service (Redux-like pattern)
+// dataService.js
+let sharedData = {};
+
+export function setSharedData(key, data) {
+    sharedData[key] = data;
+}
+
+export function getSharedData(key) {
+    return sharedData[key];
+}
+
+// Component 1: Loads data
+import { setSharedData } from 'c/dataService';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountLoader extends LightningElement {
+    connectedCallback() {
+        getAccounts().then(data => {
+            setSharedData('accounts', data);  // Share data
+        });
+    }
+}
+
+// Component 2: Uses shared data
+import { getSharedData } from 'c/dataService';
+
+export default class AccountConsumer extends LightningElement {
+    get accounts() {
+        return getSharedData('accounts');
+    }
+}
+  </code></pre>
+
+  <pre><code>
+// Approach 3: Parent provides data to children via @api
+&lt;template&gt;
+    &lt;c-account-list accounts={sharedAccounts}&gt;&lt;/c-account-list&gt;
+    &lt;c-account-summary accounts={sharedAccounts}&gt;&lt;/c-account-summary&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>LDS (getRecord)</code> – Best for single record, automatic caching</li>
+    <li><code>Shared Service Module</code> – Good for app-wide state (data only, not UI)</li>
+    <li><code>Parent Component</code> – Simple, works well for related components</li>
+    <li>Avoid multiple Apex calls to the same endpoint – use caching</li>
+  </ul>
+
+  <h2>Interview Tips</h2>
+
+  <ul>
+    <li><strong>Think out loud</strong> – Explain your choices and trade-offs</li>
+    <li><strong>Ask clarifying questions</strong> – Don't assume requirements</li>
+    <li><strong>Focus on best practices</strong> – Security, performance, maintainability</li>
+    <li><strong>Test your code mentally</strong> – Consider edge cases and error scenarios</li>
+    <li><strong>Know the LWC lifecycle</strong> – connectedCallback, renderedCallback, disconnectedCallback</li>
+    <li><strong>Handling errors</strong> – Always catch and handle async failures</li>
+    <li><strong>Reactivity matters</strong> – Understand shallow equality and create new references</li>
+    <li><strong>Performance first</strong> – Use @wire for auto-refresh, imperative for user actions</li>
+    <li><strong>Reusable components</strong> – Design with @api properties for flexibility</li>
+    <li><strong>Security in code</strong> – Enforce permissions in both LWC and Apex</li>
+    <li><strong>Understand OWD + Sharing</strong> – Org-wide defaults set baseline, sharing rules/apex add exceptions</li>
+    <li><strong>Remember the hierarchy</strong> – Role hierarchy gives parent access to child records automatically</li>
+    <li><strong>FLS vs Record Access</strong> – Different layers; both must allow access</li>
+    <li><strong>Profile + PermSet stacking</strong> – Permission sets ADD to profile, never remove</li>
+    <li><strong>Test with different users</strong> – Always verify access from user's perspective, not admin</li>
+  </ul>
+
+  <p>
+    <strong>Question:</strong> A record should be private, but certain users get access dynamically via logic. How do you implement Apex sharing?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Create sharing records programmatically:
+  </p>
+
+  <pre><code>
+// Apex: Share Opportunity with specific user if condition is met
+public class OpportunityShareService {
+    
+    public static void shareWithApprover(List&lt;Opportunity&gt; opportunities) {
+        List&lt;OpportunityShare&gt; shares = new List&lt;OpportunityShare&gt;();
+        
+        for (Opportunity opp : opportunities) {
+            // Only share if amount > $100k and approver exists
+            if (opp.Amount > 100000 &amp;&amp; opp.ApproverIds__c != null) {
+                List&lt;Id&gt; approverIds = opp.ApproverIds__c.split(';');
+                
+                for (Id approverId : approverIds) {
+                    OpportunityShare share = new OpportunityShare();
+                    share.OpportunityId = opp.Id;
+                    share.UserOrGroupId = approverId;
+                    share.OpportunityAccessLevel = 'Edit';  // Read or Edit
+                    shares.add(share);
+                }
+            }
+        }
+        
+        if (!shares.isEmpty()) {
+            insert shares;
+        }
+    }
+    
+    // Remove access when condition no longer met
+    public static void removeApproverShare(List&lt;Opportunity&gt; opportunities) {
+        List&lt;Id&gt; oppIds = new List&lt;Id&gt;(new Map&lt;Id, Opportunity&gt;(opportunities).keySet());
+        
+        List&lt;OpportunityShare&gt; sharesToDelete = [
+            SELECT Id 
+            FROM OpportunityShare 
+            WHERE OpportunityId IN :oppIds 
+            AND RowCause = 'Manual'
+        ];
+        
+        if (!sharesToDelete.isEmpty()) {
+            delete sharesToDelete;
+        }
+    }
+}
+
+// Trigger
+trigger OpportunitySharingTrigger on Opportunity (after insert, after update) {
+    if (Trigger.isInsert) {
+        OpportunityShareService.shareWithApprover(Trigger.new);
+    } else if (Trigger.isUpdate) {
+        OpportunityShareService.shareWithApprover(Trigger.new);
+        OpportunityShareService.removeApproverShare(Trigger.new);
+    }
+}
+  </code></pre>
+
+  <p><strong>Key Points:</strong></p>
+  <ul>
+    <li>Use sharing record objects: AccountShare, ContactShare, OpportunityShare, etc.</li>
+    <li><code>AccessLevel</code> can be 'Read' only or 'Edit'</li>
+    <li><code>RowCause</code> indicates why record is shared (Manual, Rule, etc.)</li>
+    <li>Always handle DML errors – sharing inserts can fail if user/group doesn't exist</li>
+    <li>Run with <code>with sharing</code> keyword to enforce FLS</li>
+  </ul>
+
+  <h2>4. Profile vs Permission Set vs Sharing</h2>
+
+  <p>
+    <strong>Question:</strong> Difference between Profile vs Permission Set vs Sharing in real scenario?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Three different layers of access control:
+  </p>
+
+  <table>
+    <tr>
+      <th>Layer</th>
+      <th>What It Controls</th>
+      <th>Scope</th>
+      <th>Example</th>
+    </tr>
+    <tr>
+      <td><strong>Profile</strong></td>
+      <td>Object access, field access, system permissions</td>
+      <td>User-wide</td>
+      <td>Sales Profile can't access Finance Object</td>
+    </tr>
+    <tr>
+      <td><strong>Permission Set</strong></td>
+      <td>Extends profile permissions (add, never remove)</td>
+      <td>User-assigned</td>
+      <td>Add "Manage Quotes" to Sales Rep temporarily</td>
+    </tr>
+    <tr>
+      <td><strong>Sharing</strong></td>
+      <td>Record-level access control</td>
+      <td>Per-record</td>
+      <td>Sales Rep A can see Opp X but not Opp Y</td>
+    </tr>
+  </table>
+
+  <p><strong>Real Scenario:</strong></p>
+  <pre><code>
+Sales Profile (base permissions)
+├─ Can access Account, Opportunity objects
+├─ Cannot access Finance object
+└─ Cannot see phone field
+
++ Permission Set (temporary)
+├─ Add "Approve Quotes" ability
+└─ Keep all other restrictions
+
++ Sharing (record control)
+├─ Sally can see Account 123
+├─ Sally cannot see Account 456
+└─ Both accounts visible to Manager due to role hierarchy
+  </code></pre>
+
+  <h2>5. Field-Level Security vs Object-Level vs Record-Level</h2>
+
+  <p>
+    <strong>Question:</strong> How do you handle field-level security vs object-level vs record-level access?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Three layers of restriction:
+  </p>
+
+  <table>
+    <tr>
+      <th>Level</th>
+      <th>Controls</th>
+      <th>Set By</th>
+      <th>Example</th>
+    </tr>
+    <tr>
+      <td><strong>Object-Level</strong></td>
+      <td>Can user access object at all?</td>
+      <td>Profile / Permission Set</td>
+      <td>Sales user cannot access Finance object</td>
+    </tr>
+    <tr>
+      <td><strong>Field-Level</strong></td>
+      <td>Can user see/edit specific fields?</td>
+      <td>Profile / Permission Set</td>
+      <td>Sales user can see Amount but not Cost__c</td>
+    </tr>
+    <tr>
+      <td><strong>Record-Level</strong></td>
+      <td>Can user access specific records?</td>
+      <td>OWD / Sharing Rules / Apex Sharing</td>
+      <td>Sales user can see their own Oppty, not competitor's</td>
+    </tr>
+  </table>
+
+  <p><strong>Access Check Order (top to bottom):</strong></p>
+  <pre><code>
+1. Can user access the Object? (OWD)
+2. Can user access the Field? (FLS in Profile/PermSet)
+3. Can user see this Record? (Sharing Rules / Apex Sharing)
+4. Can user Edit this Field? (FLS for Edit + Record Access)
+
+If ANY layer says NO, access is DENIED.
+  </code></pre>
+
+  <p><strong>Example:</strong></p>
+  <pre><code>
+Sales user:
+✅ Can access Opportunity object (OWD = Private)
+✅ Can see Amount field (FLS allows read)
+❌ Cannot see this specific Opp (not owner, not shared, manager)
+❌ Result: User cannot see record
+
+---
+
+Manager:
+✅ Can access Opportunity object
+✅ Can see Amount field
+✅ Can see Opp because below Sales Rep in hierarchy
+✅ Can edit Amount (FLS allows edit)
+✅ Result: Manager can view and edit
+  </code></pre>
+
+  <h2>6. User Can See Record But Not Edit</h2>
+
+  <p>
+    <strong>Question:</strong> A user can see a record but not edit it. What could be the reasons?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Check in this order:
+  </p>
+
+  <ol>
+    <li><strong>Field-Level Security (FLS)</strong> – Field hidden or read-only in Profile
+      <ul>
+        <li>Check: Setup → Users → Profiles → Profile Name → Field Permissions</li>
+        <li>Fix: Grant Read/Write on field</li>
+      </ul>
+    </li>
+    <li><strong>Record-Level Access</strong> – User has Read-only sharing, not Edit
+      <ul>
+        <li>Check: Record Sharing Details → see user's access level</li>
+        <li>Fix: Change OpportunityShare.AccessLevel = 'Edit'</li>
+      </ul>
+    </li>
+    <li><strong>Object-Level Permissions</strong> – Profile can't edit object type
+      <ul>
+        <li>Check: Profile → Object Permissions → Edit access</li>
+        <li>Fix: Enable Edit on object</li>
+      </ul>
+    </li>
+    <li><strong>Org-Level Restrictions</strong> – Org-wide defaults prevent edit
+      <ul>
+        <li>Check: Setup → Sharing Settings → OWD for object</li>
+        <li>Fix: Change to Read/Write or controlled by sharing rules</li>
+      </ul>
+    </li>
+    <li><strong>Record Locked/Approval</strong> – Record in approved stage
+      <ul>
+        <li>Check: Approval process locked record</li>
+        <li>Fix: Unlock record or use bypass sharing</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>7. Public Groups vs Roles</h2>
+
+  <p>
+    <strong>Question:</strong> When would you use Public Groups vs Roles?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Different purposes and behaviors:
+  </p>
+
+  <table>
+    <tr>
+      <th>Aspect</th>
+      <th>Roles</th>
+      <th>Public Groups</th>
+    </tr>
+    <tr>
+      <td><strong>Hierarchy</strong></td>
+      <td>Hierarchical (tree structure)</td>
+      <td>Flat (just membership)</td>
+    </tr>
+    <tr>
+      <td><strong>Inheritance</strong></td>
+      <td>Parent sees child records</td>
+      <td>No inheritance</td>
+    </tr>
+    <tr>
+      <td><strong>Use Case</strong></td>
+      <td>Org structure, manager visibility</td>
+      <td>Cross-functional teams, skill-based groups</td>
+    </tr>
+    <tr>
+      <td><strong>Example</strong></td>
+      <td>CEO → Manager → Sales Rep</td>
+      <td>"Finance Approvers", "East Coast Team", "Data Analysts"</td>
+    </tr>
+    <tr>
+      <td><strong>Sharing Rules</strong></td>
+      <td>Can use "Based on Role"</td>
+      <td>Can't (must use "Based on Role" for hierarchy)</td>
+    </tr>
+  </table>
+
+  <p><strong>Scenario:</strong> Share records to "Finance Team" (includes people from Sales, Ops, Legal)</p>
+  <pre><code>
+Solution: Use Public Group "Finance Team" with members from different roles.
+Sharing Rule: IF Approver_Group__c = 'Finance', share with PublicGroup.FinanceTeam
+  </code></pre>
+
+  <h2>8. Community User Related Records Access</h2>
+
+  <p>
+    <strong>Question:</strong> A community user needs limited access to related records. How do you design external sharing model?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Account-based sharing:
+  </p>
+
+  <pre><code>
+// Community User sees:
+// ✅ Their own User record
+// ✅ Their Account (customer's account)
+// ✅ Contacts related to that Account (via relationship)
+// ✅ Cases they created or are related to Account
+// ❌ Sensitive opportunity details
+
+// Setup:
+Setup → Sharing Settings:
+- Account OWD: Controlled by Parent
+- Contact OWD: Controlled by Parent (Account)
+- Case OWD: Public Read/Write or Controlled by Parent
+- Opportunity OWD: Private (not visible to community)
+
+// Apex: Ensure portal user only sees their Account data
+public with sharing class ContractController {
+    @AuraEnabled(cacheable=true)
+    public static List&lt;Contract__c&gt; getMyContracts() {
+        // with sharing automatically filters to user's accessible records
+        return [
+            SELECT Id, Name, Amount__c, Status__c
+            FROM Contract__c
+            WHERE Account__c IN (SELECT AccountId FROM User WHERE Id = :UserInfo.getUserId())
+        ];
+    }
+}
+  </code></pre>
+
+  <h2>9. OWD Public Read/Write But Still Want Restrictions</h2>
+
+  <p>
+    <strong>Question:</strong> What happens when OWD is Public Read/Write but you still want restrictions?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Anti-Sharing Rules or custom logic:
+  </p>
+
+  <pre><code>
+// If OWD = Public Read/Write, everyone sees all records.
+// To restrict: Use anti-sharing or custom validation.
+
+// Option 1: Validation Rule (prevents edit, not view)
+IF(
+    AND(
+        $Profile.Name != 'System Administrator',
+        Sensitivity__c = 'Confidential'
+    ),
+    TRUE
+)
+// Blocks non-admins from editing Confidential records (but they can still see)
+
+// Option 2: Custom Logic in Apex (deny read/write)
+public with sharing class AccountController {
+    @AuraEnabled
+    public static Account getAccount(Id accountId) {
+        Account acc = [SELECT Id, Name, SensitiveData__c FROM Account WHERE Id = :accountId];
+        
+        // Deny access if sensitive and not admin
+        if (acc.Sensitivity__c = 'Confidential' &amp;&amp; !isAdmin()) {
+            throw new AuraHandledException('Access Denied');
+        }
+        return acc;
+    }
+}
+
+// Option 3: Remove OWD = Public Read/Write, use Sharing Rules instead
+// ✅ Better approach: Set OWD to Private/Read Only, grant access via Sharing Rules
+  </code></pre>
+
+  <h2>10. Troubleshooting "User Can't See Record"</h2>
+
+  <p>
+    <strong>Question:</strong> How do you troubleshoot "user can't see record" issue step by step?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use this checklist:
+  </p>
+
+  <pre><code>
+STEP 1: Check Org-Wide Defaults (OWD)
+├─ Go to Setup → Sharing Settings → [Object]
+├─ Read: "The account level is set to Private"
+├─ Q: Can user see ANY records of this type? 
+│   └─ If NO → Likely OWD or Field-Level Security issue
+
+STEP 2: Check Record Sharing
+├─ Open the record → sharing icon (bottom right)
+├─ Q: Is user listed with 'Read' or 'Edit' access?
+│   └─ If NO → Add via sharing rule or manual share
+│   └─ If YES → Drill down to field level
+
+STEP 3: Check Profile/Permission Set
+├─ Setup → Users → User Details → [User]
+├─ Check Profile → Object Permissions
+├─ Q: Does profile have READ access to object?
+│   └─ If NO → Add to profile or permission set
+│   └─ If YES → Check field access next
+
+STEP 4: Check Field-Level Security
+├─ Profile → Field Permissions → [Object]
+├─ Q: Is the FIELD (or key fields) readable?
+│   └─ If NO → Enable read access on field
+│   └─ If YES → Check record ownership/hierarchy
+
+STEP 5: Check Role Hierarchy
+├─ Is user owner of record? YES → can see
+├─ Is user above owner in hierarchy? YES → can see
+├─ Is record shared? Check sharing rules/manual share
+├─ Is sharing rule matching? YES → can see
+
+STEP 6: Check Apex Sharing
+├─ Query ShareWith__c or custom sharing logic
+├─ Is record dynamically shared? Check trigger logs
+
+STEP 7: Last Resort – Check System
+├─ Clear browser cache (Ctrl+Shift+Del)
+├─ Login as different user and test
+├─ Check org debug logs for AuraEnabled exceptions
+└─ Run: SOSL search to see if record appears
+  </code></pre>
+
+  <h2>11. Sales Reps See Only Their Records, Managers See Team Data</h2>
+
+  <p>
+    <strong>Question:</strong> Sales reps should see only their records, managers should see team data. How do you design access?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Combine OWD + Role Hierarchy:
+  </p>
+
+  <pre><code>
+// Org Structure:
+VP Sales
+├─ Regional Manager - West
+│  ├─ Sales Rep 1
+│  └─ Sales Rep 2
+└─ Regional Manager - East
+   └─ Sales Rep 3
+
+// Configuration:
+1. OWD for Opportunity = PRIVATE
+2. Sales Rep owns their own Opportunities
+3. Role Hierarchy grants manager visibility
+
+// Results:
+Sales Rep 1:
+- Sees their own Oppty (as owner)
+- Cannot see Oppty owned by Sales Rep 2
+- Cannot see Regional Manager's Oppty
+
+Regional Manager - West:
+- Sees all Oppty owned by Sales Rep 1 &amp; 2 (below in hierarchy)
+- Sees their own Oppty (as owner)
+- Cannot see Regional Manager - East's Oppty
+
+VP Sales:
+- Sees all Oppty (everyone below in hierarchy)
+
+// Adding Apex Sharing for exceptions:
+If an Oppty needs review by Finance team:
+
+public class OpportunityShareService {
+    public static void shareWithFinanceForReview(List&lt;Opportunity&gt; opportunities) {
+        List&lt;OpportunityShare&gt; shares = new List&lt;OpportunityShare&gt;();
+        
+        for (Opportunity opp : opportunities) {
+            if (opp.FinanceReview__c == true) {
+                OpportunityShare share = new OpportunityShare();
+                share.OpportunityId = opp.Id;
+                share.UserOrGroupId = PublicGroupId.Finance;  // Public Group ID
+                share.OpportunityAccessLevel = 'Read';
+                shares.add(share);
+            }
+        }
+        insert shares;
+    }
+}
+  </code></pre>
+
+  <h2>12. Finance Read-Only Access Across Regions</h2>
+
+  <p>
+    <strong>Question:</strong> Finance needs read-only access to all Opportunities across regions. What approach will you use?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Sharing Rule with Public Group:
+  </p>
+
+  <pre><code>
+// Step 1: Create Public Group for Finance
+Setup → Users → Public Groups → New
+Name: Finance Team
+Add members: All Finance users, Finance manager
+
+// Step 2: Create Sharing Rule
+Setup → Sharing Settings → Opportunity → New
+Rule Name: Finance View All Oppty
+Type: Opportunity
+Share With: Public Group (Finance Team)
+Access Level: Read
+
+Criteria:
+- All Opportunities (no filters)
+OR
+- RecordType = "Enterprise"
+OR
+- StageName IN ('Proposal', 'Negotiation')
+
+// Result:
+- Every Finance user can READ all Oppty
+- Finance users cannot EDIT Oppty
+- Finance users cannot delete Oppty
+- Access applies globally across regions
+
+// Apex: Verify access
+public with sharing class FinanceReporting {
+    @AuraEnabled(cacheable=true)
+    public static List&lt;Opportunity&gt; getAllOpportunitiesForReporting() {
+        // with sharing respects OWD and sharing rules
+        return [
+            SELECT Id, Name, Amount, StageName, OwnerId, Account.Name
+            FROM Opportunity
+            ORDER BY Amount DESC
+        ];
+    }
+}
+  </code></pre>
+
+  <h2>13. Temporary Access to a Record</h2>
+
+  <p>
+    <strong>Question:</strong> You need to give temporary access of a record to a user. How would you handle it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use scheduled Apex or workflow to auto-revoke access:
+  </p>
+
+  <pre><code>
+import { LightningElement, api, track } from 'lwc';
+import grantTemporaryAccess from '@salesforce/apex/SharingService.grantTemporaryAccess';
+
+export default class TemporaryAccessComponent extends LightningElement {
+    @api recordId;
+    @track accessDays = 7;
+    @track selectedUser;
+
+    async handleGrantAccess() {
+        try {
+            await grantTemporaryAccess({
+                recordId: this.recordId,
+                userId: this.selectedUser,
+                days: this.accessDays
+            });
+            alert('Access granted until ' + new Date(Date.now() + this.accessDays * 24 * 60 * 60 * 1000));
+        } catch (error) {
+            alert('Error: ' + error.body.message);
+        }
+    }
+}
+
+// Apex: Grant and auto-revoke access
+public class SharingService {
+    
+    @AuraEnabled
+    public static void grantTemporaryAccess(Id recordId, Id userId, Integer days) {
+        // Insert share record
+        OpportunityShare share = new OpportunityShare();
+        share.OpportunityId = recordId;
+        share.UserOrGroupId = userId;
+        share.OpportunityAccessLevel = 'Edit';
+        share.RowCause = 'Manual';
+        insert share;
+        
+        // Create scheduled action to remove access
+        scheduleAccessRevoke(recordId, userId, days);
+    }
+    
+    private static void scheduleAccessRevoke(Id recordId, Id userId, Integer days) {
+        RevokeAccessJob job = new RevokeAccessJob(recordId, userId);
+        String cronExpression = getCronExpression(days);
+        System.schedule('Revoke_' + recordId, cronExpression, job);
+    }
+}
+
+// Scheduled Job: Revoke access
+public class RevokeAccessJob implements Schedulable {
+    private Id recordId;
+    private Id userId;
+    
+    public RevokeAccessJob(Id recordId, Id userId) {
+        this.recordId = recordId;
+        this.userId = userId;
+    }
+    
+    public void execute(SchedulableContext ctx) {
+        List&lt;OpportunityShare&gt; shares = [
+            SELECT Id 
+            FROM OpportunityShare 
+            WHERE OpportunityId = :recordId 
+            AND UserOrGroupId = :userId 
+            AND RowCause = 'Manual'
+        ];
+        
+        if (!shares.isEmpty()) {
+            delete shares;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>14. Dynamic Sharing Based on Field Value</h2>
+
+  <p>
+    <strong>Question:</strong> A record should be shared dynamically based on a field value. What solution will you use?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Apex trigger with field-based logic:
+  </p>
+
+  <pre><code>
+// Scenario: Share Opportunity with Account team when Status = "Reviewing"
+
+trigger OpportunityFieldBasedSharing on Opportunity (after insert, after update) {
+    if (Trigger.isAfter) {
+        OpportunityFieldSharingService.shareBasedOnStatus(Trigger.new, Trigger.oldMap);
+    }
+}
+
+public class OpportunityFieldSharingService {
+    
+    public static void shareBasedOnStatus(List&lt;Opportunity&gt; newOppty, Map&lt;Id, Opportunity&gt; oldMap) {
+        List&lt;OpportunityShare&gt; sharesToAdd = new List&lt;OpportunityShare&gt;();
+        List&lt;Id&gt; opptyToUnshare = new List&lt;Id&gt;();
+        
+        for (Opportunity opp : newOppty) {
+            Opportunity oldOpp = oldMap.get(opp.Id);
+            String newStatus = opp.StageName;
+            String oldStatus = oldOpp.StageName;
+            
+            // If changed to "Reviewing", share with Account team
+            if (newStatus == 'Reviewing' &amp;&amp; oldStatus != 'Reviewing') {
+                // Get account team members
+                List&lt;AccountTeamMember&gt; teamMembers = [
+                    SELECT UserId FROM AccountTeamMember 
+                    WHERE AccountId = :opp.AccountId
+                ];
+                
+                for (AccountTeamMember member : teamMembers) {
+                    OpportunityShare share = new OpportunityShare();
+                    share.OpportunityId = opp.Id;
+                    share.UserOrGroupId = member.UserId;
+                    share.OpportunityAccessLevel = 'Read';
+                    sharesToAdd.add(share);
+                }
+            }
+            
+            // If changed from "Reviewing" to other status, revoke access
+            if (oldStatus == 'Reviewing' &amp;&amp; newStatus != 'Reviewing') {
+                opptyToUnshare.add(opp.Id);
+            }
+        }
+        
+        // Insert new shares
+        if (!sharesToAdd.isEmpty()) {
+            insert sharesToAdd;
+        }
+        
+        // Remove old shares
+        if (!opptyToUnshare.isEmpty()) {
+            List&lt;OpportunityShare&gt; sharesToDelete = [
+                SELECT Id FROM OpportunityShare 
+                WHERE OpportunityId IN :opptyToUnshare 
+                AND RowCause = 'Manual'
+            ];
+            delete sharesToDelete;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>15. Users Can See Records But Cannot Edit Certain Fields</h2>
+
+  <p>
+    <strong>Question:</strong> Users can see records but cannot edit certain fields. How do you control this?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Combine Field-Level Security + Validation Rules + Lightning Components:
+  </p>
+
+  <pre><code>
+// Approach 1: Field-Level Security (simplest)
+Setup → Profiles → [Profile] → Field Permissions
+- Amount field: Read enabled, Edit disabled
+- Result: User sees Amount but input field is read-only
+
+// Approach 2: Validation Rule (more control)
+IF(
+    AND(
+        NOT($Profile.Name = 'System Administrator'),
+        CHANGED(Renewal_Date__c),
+        Renewal_Date__c > TODAY()
+    ),
+    TRUE
+)
+Error Message: "Non-admins cannot edit future renewal dates"
+
+// Approach 3: Lightning Component (most control)
+import { LightningElement, api, track, wire } from 'lwc';
+import { getRecord, getFieldValue } from 'lightning/uiRecordApi';
+import getFieldEditability from '@salesforce/apex/FieldSecurityService.getFieldEditability';
+
+export default class RestrictedFieldForm extends LightningElement {
+    @api recordId;
+    @track fieldPermissions = {};
+
+    @wire(getFieldEditability, { recordId: '$recordId' })
+    wiredPermissions({ data, error }) {
+        if (data) {
+            this.fieldPermissions = data;
+        }
+    }
+
+    get canEditAmount() {
+        return this.fieldPermissions.Amount?.editable;
+    }
+
+    handleSave() {
+        // Validate field edits before sending to Apex
+        if (!this.canEditAmount) {
+            alert('You cannot edit Amount field');
+            return;
+        }
+        // Proceed with save
+    }
+}
+
+// Apex: Check FLS before allowing edit
+public with sharing class FieldSecurityService {
+    
+    @AuraEnabled
+    public static Map&lt;String, FieldPermission&gt; getFieldEditability(Id recordId) {
+        Map&lt;String, FieldPermission&gt; fieldAccess = new Map&lt;String, FieldPermission&gt;();
+        
+        Schema.DescribeSobjectResult describe = recordId.getSObjectType().getDescribe();
+        Map&lt;String, Schema.SObjectField&gt; fields = describe.fields.getMap();
+        
+        for (String fieldName : new List&lt;String&gt;{ 'Amount', 'RenewalDate', 'Description' }) {
+            Schema.SObjectField field = fields.get(fieldName.toLowerCase());
+            Schema.DescribeFieldResult fieldDesc = field.getDescribe();
+            
+            FieldPermission perm = new FieldPermission();
+            perm.readable = fieldDesc.isAccessible();
+            perm.editable = fieldDesc.isUpdateable();
+            
+            fieldAccess.put(fieldName, perm);
+        }
+        
+        return fieldAccess;
+    }
+    
+    public class FieldPermission {
+        @AuraEnabled public Boolean readable { get; set; }
+        @AuraEnabled public Boolean editable { get; set; }
+    }
+}
+  </code></pre>
+
+  <h2>16. External (Community) Users See Only Their Related Records</h2>
+
+  <p>
+    <strong>Question:</strong> External (community) users should only see their own related records. How do you design it?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use Account-based sharing + Apex with sharing:
+  </p>
+
+  <pre><code>
+// Community user setup:
+1. Portal User linked to Account (customer account)
+2. OWD settings for Customer Portal:
+   - Account: Controlled by Parent (Account)
+   - Contact: Controlled by Parent (Account)
+   - Case: Public Read/Write (so they can see all cases)
+   - Opportunity: Private
+
+3. Portal User sees:
+   ✅ Their Account (the company they work for)
+   ✅ Contacts on their Account
+   ✅ Cases on their Account
+   ❌ Other companies' data
+
+// Apex: Enforce access in code
+public with sharing class CommunityDataService {
+    
+    @AuraEnabled(cacheable=true)
+    public static List&lt;Contact&gt; getAccountContacts() {
+        // with sharing automatically filters to user's account
+        User portalUser = [SELECT AccountId FROM User WHERE Id = :UserInfo.getUserId()];
+        
+        return [
+            SELECT Id, Name, Email, Phone 
+            FROM Contact 
+            WHERE AccountId = :portalUser.AccountId
+        ];
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List&lt;Case&gt; getMyAccountCases() {
+        User portalUser = [SELECT AccountId FROM User WHERE Id = :UserInfo.getUserId()];
+        
+        return [
+            SELECT Id, CaseNumber, Subject, Status 
+            FROM Case 
+            WHERE AccountId = :portalUser.AccountId
+        ];
+    }
+}
+
+// LWC: Display community data
+import { LightningElement, track, wire } from 'lwc';
+import getAccountContacts from '@salesforce/apex/CommunityDataService.getAccountContacts';
+
+export default class CommunityView extends LightningElement {
+    @track contacts = [];
+
+    @wire(getAccountContacts)
+    wiredContacts({ data, error }) {
+        if (data) {
+            this.contacts = data;
+        }
+    }
+}
+  </code></pre>
+
+  <h2>17. Troubleshooting: User Cannot See Record Step by Step</h2>
+
+  <p>
+    <strong>Question:</strong> A user cannot see a record they should have access to. How do you troubleshoot step by step?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Use this systematic troubleshooting approach:
+  </p>
+
+  <pre><code>
+// Step 1: Verify user can see records at all (OWD baseline)
+SELECT Id, Name FROM Opportunity LIMIT 10
+// If query returns records → OWD allows some visibility
+// If query returns 0 records → Check OWD (likely Private) or FLS
+
+// Step 2: Check if user owns the record
+SELECT OwnerId FROM Opportunity WHERE Id = :recordId
+IF (OwnerId = UserInfo.getUserId()) {
+    CONCLUSION: User is owner, should have full access
+    CHECK: Profile edit permissions
+}
+
+// Step 3: Check role hierarchy
+User u = [SELECT UserRoleId FROM User WHERE Id = :UserInfo.getUserId()];
+UserRole r = [SELECT Id, ParentRoleId FROM UserRole WHERE Id = :u.UserRoleId];
+
+IF (record.OwnerId's role is below current user's role hierarchy) {
+    CONCLUSION: User should see record via role hierarchy
+    CHECK: OWD is not blocking it (set to Private at minimum)
+}
+
+// Step 4: Check if record is shared explicitly
+List&lt;OpportunityShare&gt; shares = [
+    SELECT Id, AccessLevel 
+    FROM OpportunityShare 
+    WHERE OpportunityId = :recordId 
+    AND (UserOrGroupId = :userId OR UserOrGroupId IN (public groups user belongs to))
+];
+
+IF (shares.size() > 0) {
+    CONCLUSION: Record is explicitly shared
+    IF (AccessLevel = 'Read') → User can READ but not EDIT
+}
+
+// Step 5: Check Field-Level Security
+Schema.DescribeFieldResult fieldDesc = Opportunity.Amount.getDescribe();
+IF (!fieldDesc.isAccessible()) {
+    PROBLEM: User cannot read Amount field
+    FIX: Enable field in Profile/PermSet
+} ELSE IF (!fieldDesc.isUpdateable()) {
+    PROBLEM: User can read but cannot edit Amount
+    FIX: User has Read access to record but not edit to this field
+}
+
+// Step 6: Check for API filters
+// Some record types may be hidden by validation rules or SOSL
+SELECT COUNT() FROM Opportunity WHERE Id = :recordId
+IF (count = 0) {
+    PROBLEM: Record doesn't match user's query filters
+    CHECK: Are you using with sharing clause?
+    FIX: Ensure Apex uses with sharing for correct filtering
+}
+
+// Step 7: Verify record actually exists and isn't deleted
+SELECT Id FROM Opportunity WHERE Id = :recordId ALL ROWS
+IF (IsDeleted = true) {
+    CONCLUSION: Record is in recycle bin
+    FIX: Restore from recycle bin if needed
+}
+
+// Debug Query to get complete picture:
+List&lt;Opportunity&gt; opps = [
+    SELECT 
+        Id, Name, OwnerId, Owner.Name, Amount,
+        (SELECT Id, UserOrGroupId, OpportunityAccessLevel FROM OpportunityShares)
+    FROM Opportunity 
+    WHERE Id = :recordId
+];
+  </code></pre>
+
+  <h2>18. Restrict Access When OWD is Public Read/Write</h2>
+
+  <p>
+    <strong>Question:</strong> You need to restrict access even when OWD is Public Read/Write. What can you do?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> OWD = Public Read/Write gives global access; use alternatives:
+  </p>
+
+  <pre><code>
+// PROBLEM: If OWD = Public Read/Write, EVERYONE can see ALL records
+// SOLUTION OPTIONS:
+
+// Option 1: Change OWD to Private or Read Only ✅ BEST
+Setup → Sharing Settings → Opportunity
+Change: Public Read/Write → Private
+Then grant access via Sharing Rules/Apex Sharing
+
+// Option 2: Use Validation Rules (prevents EDIT, not VIEW)
+IF(
+    AND(
+        Confidentiality__c = 'Sensitive',
+        NOT($Profile.Name = 'System Administrator')
+    ),
+    TRUE
+)
+Error: "Only admins can edit sensitive records"
+// Note: Users can still SEE sensitive records, just can't edit
+
+// Option 3: Use Apex with custom restrictions
+public with sharing class OpportunitySecurity {
+    @AuraEnabled(cacheable=true)
+    public static List&lt;Opportunity&gt; getAccessibleOpportunities() {
+        // Apex with sharing respects OWD and Sharing Rules
+        List&lt;Opportunity&gt; opps = [
+            SELECT Id, Name, Amount 
+            FROM Opportunity
+        ];
+        
+        // Add custom filter to deny based on field
+        List&lt;Opportunity&gt; filtered = new List&lt;Opportunity&gt;();
+        for (Opportunity opp : opps) {
+            if (opp.Confidentiality__c != 'TopSecret' || isCurrentUserAdmin()) {
+                filtered.add(opp);
+            }
+        }
+        return filtered;
+    }
+}
+
+// Option 4: Use record-level access control in LWC
+// Even if record is visible via SOQL, hide in LWC based on field
+import { LightningElement, track } from 'lwc';
+
+export default class OpportunitiesList extends LightningElement {
+    @track visibleOpportunities = [];
+
+    handleDataLoaded(event) {
+        const allOpps = event.detail;
+        
+        // Filter in UI if Confidentiality = TopSecret
+        this.visibleOpportunities = allOpps.filter(
+            opp => opp.Confidentiality__c !== 'TopSecret'
+        );
+    }
+}
+
+// RECOMMENDATION:
+// Change OWD from Public Read/Write to Private
+// Grant access explicitly via Sharing Rules or Apex
+// This is the proper security model
+  </code></pre>
+
+  <h2>19. Multiple Teams Need Access – Roles or Public Groups?</h2>
+
+  <p>
+    <strong>Question:</strong> Multiple teams need access to the same set of records. Do you use Roles or Public Groups? Why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Depends on team structure:
+  </p>
+
+  <table>
+    <tr>
+      <th>Scenario</th>
+      <th>Use Roles</th>
+      <th>Use Public Groups</th>
+    </tr>
+    <tr>
+      <td>Sales team hierarchy (VP → Manager → Rep)</td>
+      <td>✅ YES – hierarchy matters</td>
+      <td>❌ No – not hierarchical</td>
+    </tr>
+    <tr>
+      <td>Cross-functional teams (Sales + Finance + Legal)</td>
+      <td>❌ No – not structural</td>
+      <td>✅ YES – skill-based, not org hierarchy</td>
+    </tr>
+    <tr>
+      <td>Finance needs all Oppty (across all regions)</td>
+      <td>❌ No – they're not in sales org</td>
+      <td>✅ YES – create "Finance Approvers" group</td>
+    </tr>
+    <tr>
+      <td>Multiple account teams for same account</td>
+      <td>❌ No – not structural</td>
+      <td>✅ YES – "West Region Team", "East Region Team"</td>
+    </tr>
+  </table>
+
+  <p><strong>Real Example:</strong></p>
+  <pre><code>
+Scenario: Three teams need access to "Enterprise Opportunities"
+- Sales team (hierarchical)
+- Finance review team (cross-functional)
+- Legal review team (ad-hoc)
+
+Solution:
+1. Create Sharing Rule for "Sales" based on Roles
+   Share with role "Sales" + subordinates
+
+2. Create Public Group "Finance Approvers"
+   Add: Finance VP, Finance Manager, Auditor role
+
+3. Create Public Group "Legal Team"
+   Add: Legal counsel, in-house attorney, paralegal
+
+4. Create two Sharing Rules:
+   Rule 1: IF Requires_Finance_Review__c = true
+           Share with Public Group "Finance Approvers"
+   
+   Rule 2: IF Requires_Legal_Review__c = true
+           Share with Public Group "Legal Team"
+
+Result:
+- Sales sees records in their role
+- Finance sees only records needing finance review
+- Legal sees only records needing legal review
+  </code></pre>
+
+  <h2>20. Complex Sharing Logic – Sharing Rules or Apex?</h2>
+
+  <p>
+    <strong>Question:</strong> You need to share records from a custom object based on complex logic. Would you use Sharing Rules or Apex Sharing? Why?
+  </p>
+
+  <p>
+    <strong>Answer:</strong> Choose based on complexity:
+  </p>
+
+  <table>
+    <tr>
+      <th>Scenario</th>
+      <th>Sharing Rules</th>
+      <th>Apex Sharing</th>
+    </tr>
+    <tr>
+      <td>Share if field = "X"</td>
+      <td>✅ Simple and fast</td>
+      <td>❌ Overkill</td>
+    </tr>
+    <tr>
+      <td>Share if field = "X" AND role = "Y"</td>
+      <td>✅ Good (use role-based rule)</td>
+      <td>❌ Sharing rules handle this</td>
+    </tr>
+    <tr>
+      <td>Share based on lookup field value (Account region)</td>
+      <td>❌ Can't do cross-object logic</td>
+      <td>✅ YES – query parent record, evaluate</td>
+    </tr>
+    <tr>
+      <td>Share if related Contact matches criteria</td>
+      <td>❌ No cross-object logic</td>
+      <td>✅ YES – query related records</td>
+    </tr>
+    <tr>
+      <td>Complex: Share to users on same team as record owner</td>
+      <td>❌ Can't query team membership</td>
+      <td>✅ YES – use Apex for complex joins</td>
+    </tr>
+  </table>
+
+  <p><strong>Example: Complex Sharing Rule</strong></p>
+  <pre><code>
+Requirement: Share Project record with all users in same Department as owner
+
+// Sharing Rules can't do this (no cross-object logic)
+// Solution: Use Apex
+
+trigger ProjectSharingTrigger on Project__c (after insert, after update) {
+    ProjectSharingService.shareWithDepartment(Trigger.new);
+}
+
+public class ProjectSharingService {
+    
+    public static void shareWithDepartment(List&lt;Project__c&gt; projects) {
+        // Get owner departments
+        Set&lt;Id&gt; ownerIds = new Set&lt;Id&gt;();
+        for (Project__c proj : projects) {
+            ownerIds.add(proj.OwnerId);
+        }
+        
+        // Query owners and their department
+        Map&lt;Id, String&gt; ownerDepartments = new Map&lt;Id, String&gt;();
+        for (User u : [SELECT Id, Department FROM User WHERE Id IN :ownerIds]) {
+            ownerDepartments.put(u.Id, u.Department);
+        }
+        
+        // Find all users in same departments
+        Set&lt;String&gt; departments = new Set&lt;String&gt;(ownerDepartments.values());
+        List&lt;User&gt; departmentUsers = [
+            SELECT Id FROM User 
+            WHERE Department IN :departments
+        ];
+        
+        // Create shares
+        List&lt;Project__Share&gt; shares = new List&lt;Project__Share&gt;();
+        for (Project__c proj : projects) {
+            String ownerDept = ownerDepartments.get(proj.OwnerId);
+            
+            for (User u : departmentUsers) {
+                if (u.Department == ownerDept) {
+                    Project__Share share = new Project__Share();
+                    share.ParentId = proj.Id;
+                    share.UserOrGroupId = u.Id;
+                    share.AccessLevel = 'Edit';
+                    share.RowCause = 'Manual';
+                    shares.add(share);
+                }
+            }
+        }
+        
+        insert shares;
+    }
+}
+
+// DECISION RULE:
+// If: Simple field-based rule → Use Sharing Rules ✅
+// If: Complex, cross-object, queryable logic → Use Apex ✅
+// If: Mix of both → Sharing Rules + Apex (don't duplicate logic)
+  </code></pre>
+
+  <h2>Interview Tips</h2>
+
+  <ul>
+    <li><strong>Think out loud</strong> – Explain your choices and trade-offs</li>
+    <li><strong>Ask clarifying questions</strong> – Don't assume requirements</li>
+    <li><strong>Focus on best practices</strong> – Security, performance, maintainability</li>
+    <li><strong>Test your code mentally</strong> – Consider edge cases and error scenarios</li>
+    <li><strong>Know the LWC lifecycle</strong> – connectedCallback, renderedCallback, disconnectedCallback</li>
+    <li><strong>Handling errors</strong> – Always catch and handle async failures</li>
+    <li><strong>Reactivity matters</strong> – Understand shallow equality and create new references</li>
+    <li><strong>Performance first</strong> – Use @wire for auto-refresh, imperative for user actions</li>
+    <li><strong>Reusable components</strong> – Design with @api properties for flexibility</li>
+    <li><strong>Security in code</strong> – Enforce permissions in both LWC and Apex</li>
+    <li><strong>Understand OWD + Sharing</strong> – Org-wide defaults set baseline, sharing rules/apex add exceptions</li>
+    <li><strong>Remember the hierarchy</strong> – Role hierarchy gives parent access to child records automatically</li>
+    <li><strong>FLS vs Record Access</strong> – Different layers; both must allow access</li>
+    <li><strong>Profile + PermSet stacking</strong> – Permission sets ADD to profile, never remove</li>
+    <li><strong>Test with different users</strong> – Always verify access from user's perspective, not admin</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

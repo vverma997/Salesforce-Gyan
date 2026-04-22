@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Error Handling in LWC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Error Handling in LWC – try/catch + Toast Messages</h1>
+
+  <p>
+    Proper error handling improves user experience and helps you debug issues faster. This guide covers try/catch handling in LWC and showing toast notifications.
+  </p>
+
+  <h2>1. Handling Imperative Apex Errors</h2>
+
+  <pre><code>
+import { LightningElement, track } from 'lwc';
+import saveAccount from '@salesforce/apex/AccountController.saveAccount';
+
+export default class AccountForm extends LightningElement {
+    @track error;
+
+    async handleSave() {
+        try {
+            await saveAccount({ accountName: this.accountName });
+        } catch (error) {
+            this.error = this.getErrorMessage(error);
+            this.showToast('Error', this.error, 'error');
+        }
+    }
+
+    getErrorMessage(error) {
+        if (error.body) {
+            return error.body.message || JSON.stringify(error.body);
+        }
+        return error.message || 'Unknown error';
+    }
+}
+  </code></pre>
+
+  <h2>2. Using Lightning Toasts</h2>
+
+  <pre><code>
+import { LightningElement } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+
+export default class ToastExample extends LightningElement {
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title,
+            message,
+            variant,
+        });
+        this.dispatchEvent(event);
+    }
+}
+  </code></pre>
+
+  <h3>Common variants</h3>
+  <ul>
+    <li><strong>success</strong> – success message</li>
+    <li><strong>error</strong> – error message</li>
+    <li><strong>warning</strong> – warning message</li>
+    <li><strong>info</strong> – informational message</li>
+  </ul>
+
+  <h2>3. Error Handling with @wire</h2>
+
+  <pre><code>
+import { LightningElement, wire, track } from 'lwc';
+import getRecords from '@salesforce/apex/RecordController.getRecords';
+
+export default class WiredData extends LightningElement {
+    @track data;
+    @track error;
+
+    @wire(getRecords)
+    wiredData({ error, data }) {
+        if (data) {
+            this.data = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = this.getErrorMessage(error);
+            this.showToast('Load failed', this.error, 'error');
+        }
+    }
+
+    getErrorMessage(error) {
+        if (Array.isArray(error.body)) {
+            return error.body.map(e => e.message).join(', ');
+        } else if (error.body && error.body.message) {
+            return error.body.message;
+        }
+        return error.message || 'Unknown error';
+    }
+}
+  </code></pre>
+
+  <h2>4. Global Error Handling Pattern</h2>
+
+  <pre><code>
+export default class ErrorUtils {
+    static getErrorMessage(error) {
+        if (Array.isArray(error.body)) {
+            return error.body.map(e => e.message).join(', ');
+        } else if (error.body && error.body.message) {
+            return error.body.message;
+        }
+        return error.message || 'Unknown error';
+    }
+
+    static showToast(component, title, message, variant = 'error') {
+        component.dispatchEvent(
+            new ShowToastEvent({
+                title,
+                message,
+                variant,
+            })
+        );
+    }
+}
+  </code></pre>
+
+  <h2>5. Displaying Inline Validation Errors</h2>
+
+  <p>
+    Show errors next to form fields for better usability.
+  </p>
+
+  <pre><code>
+&lt;template&gt;
+    &lt;lightning-input
+        label="Email"
+        type="email"
+        value={email}
+        onchange={handleEmailChange}
+        message-when-bad-input={emailError}
+        class={emailClass}
+    &gt;&lt;/lightning-input&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>6. Best Practices</h2>
+
+  <ul>
+    <li>Always use <code>try/catch</code> for imperative Apex</li>
+    <li>Use shared error formatting utilities</li>
+    <li>Show toast messages for action results</li>
+    <li>Keep error messages user-friendly, not raw stack traces</li>
+    <li>Use inline field validation for forms</li>
+    <li>Log errors in Apex when necessary for server-side issues</li>
+  </ul>
+
+</div>
+
+</body>
+</html>

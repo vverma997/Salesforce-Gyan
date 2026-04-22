@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Data Binding & Events in LWC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/post.css">
+  <script src="../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../index.html">Home</a>
+  <a href="../../blog.html">Blog</a>
+  <a href="../../lwc.html">LWC</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>Data Binding & Events in LWC</h1>
+
+  <p>
+    Lightning Web Components use one-way data binding and custom events to connect parent and child components. This guide covers how to pass data, receive updates, and bubble events.
+  </p>
+
+  <h2>1. Passing Data via @track and @api</h2>
+
+  <h3>Parent Component</h3>
+  <pre><code>
+// parentComponent.js
+import { LightningElement, track } from 'lwc';
+
+export default class ParentComponent extends LightningElement {
+    @track accountName = 'Acme Corp';
+    @track isLoading = false;
+
+    handleNameChange(event) {
+        this.accountName = event.target.value;
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- parentComponent.html --&gt;
+&lt;template&gt;
+    &lt;lightning-input 
+        type="text" 
+        label="Account Name"
+        value={accountName}
+        onchange={handleNameChange}&gt;
+    &lt;/lightning-input&gt;
+
+    &lt;!-- Pass data to child --&gt;
+    &lt;c-child-component 
+        account-name={accountName}
+        is-loading={isLoading}&gt;
+    &lt;/c-child-component&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Child Component</h3>
+  <pre><code>
+// childComponent.js
+import { LightningElement, api, track } from 'lwc';
+
+export default class ChildComponent extends LightningElement {
+    @api accountName;  // Receives from parent
+    @api isLoading;
+
+    @track displayName = '';
+
+    connectedCallback() {
+        // Update display when parent data arrives
+        if (this.accountName) {
+            this.displayName = this.accountName.toUpperCase();
+        }
+    }
+
+    // This is called when @api property changes
+    displayAccountName() {
+        return `Account: ${this.accountName}`;
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- childComponent.html --&gt;
+&lt;template&gt;
+    &lt;div class="card"&gt;
+        &lt;h3&gt;{displayAccountName()}&lt;/h3&gt;
+        &lt;p&gt;Status: &lt;span if:true={isLoading}&gt;Loading...&lt;/span&gt;&lt;/p&gt;
+    &lt;/div&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>2. Calling Child Methods from Parent</h2>
+
+  <p>
+    Use template refs to call methods on child components:
+  </p>
+
+  <h3>Parent Component</h3>
+  <pre><code>
+// parentComponent.js
+import { LightningElement } from 'lwc';
+
+export default class ParentComponent extends LightningElement {
+    handleRefresh() {
+        // Get reference to child component
+        const childComponent = this.template.querySelector('c-child-component');
+        
+        // Call child method
+        childComponent.refresh();
+    }
+
+    handleResetForm() {
+        const childComponent = this.template.querySelector('c-child-component');
+        childComponent.resetForm();
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- parentComponent.html --&gt;
+&lt;template&gt;
+    &lt;lightning-button 
+        label="Refresh Data" 
+        onclick={handleRefresh}&gt;
+    &lt;/lightning-button&gt;
+
+    &lt;lightning-button 
+        label="Reset Form" 
+        onclick={handleResetForm}&gt;
+    &lt;/lightning-button&gt;
+
+    &lt;c-child-component&gt;&lt;/c-child-component&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h3>Child Component</h3>
+  <pre><code>
+// childComponent.js
+import { LightningElement, track } from 'lwc';
+
+export default class ChildComponent extends LightningElement {
+    @track data = [];
+    @track formData = {};
+
+    // Method called from parent
+    refresh() {
+        this.loadData();
+    }
+
+    // Method called from parent
+    resetForm() {
+        this.formData = {};
+        this.template.querySelector('form').reset();
+    }
+
+    loadData() {
+        // Simulate data fetch
+        this.data = [
+            { id: 1, name: 'Item 1' },
+            { id: 2, name: 'Item 2' }
+        ];
+    }
+}
+  </code></pre>
+
+  <h2>3. Parent Listening to Child Events</h2>
+
+  <p>
+    While data flows down via @api, events bubble up from child to parent:
+  </p>
+
+  <h3>Child Component dispatching event</h3>
+  <pre><code>
+// childComponent.js
+import { LightningElement, api } from 'lwc';
+
+export default class ChildComponent extends LightningElement {
+    @api accountId;
+
+    handleSave() {
+        // Dispatch custom event to parent
+        const event = new CustomEvent('accountsaved', {
+            detail: { 
+                accountId: this.accountId,
+                timestamp: new Date()
+            }
+        });
+        this.dispatchEvent(event);
+    }
+}
+  </code></pre>
+
+  <h3>Parent Component listening to event</h3>
+  <pre><code>
+// parentComponent.js
+import { LightningElement } from 'lwc';
+
+export default class ParentComponent extends LightningElement {
+    handleAccountSaved(event) {
+        const { accountId, timestamp } = event.detail;
+        console.log(`Account ${accountId} saved at ${timestamp}`);
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- parentComponent.html --&gt;
+&lt;template&gt;
+    &lt;c-child-component 
+        account-id="00100000000001"
+        onaccountsaved={handleAccountSaved}&gt;
+    &lt;/c-child-component&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>4. Real Example: Account Editor</h2>
+
+  <pre><code>
+// accountListComponent.js
+import { LightningElement, track } from 'lwc';
+
+export default class AccountListComponent extends LightningElement {
+    @track accounts = [
+        { id: '001', name: 'Acme Corp', revenue: 1000000 },
+        { id: '002', name: 'Global Tech', revenue: 500000 }
+    ];
+    
+    @track selectedAccountId;
+
+    handleAccountSelect(event) {
+        this.selectedAccountId = event.detail;
+    }
+
+    handleAccountUpdated(event) {
+        const { accountId, name, revenue } = event.detail;
+        
+        // Update account in list
+        const index = this.accounts.findIndex(acc => acc.id === accountId);
+        if (index !== -1) {
+            this.accounts[index] = { id: accountId, name, revenue };
+        }
+    }
+}
+  </code></pre>
+
+  <pre><code>
+&lt;!-- accountListComponent.html --&gt;
+&lt;template&gt;
+    &lt;div class="container"&gt;
+        &lt;h2&gt;Accounts&lt;/h2&gt;
+        &lt;c-account-list-view 
+            accounts={accounts}
+            onaccountselect={handleAccountSelect}&gt;
+        &lt;/c-account-list-view&gt;
+
+        &lt;c-account-editor 
+            if:true={selectedAccountId}
+            account-id={selectedAccountId}
+            onaccountupdated={handleAccountUpdated}&gt;
+        &lt;/c-account-editor&gt;
+    &lt;/div&gt;
+&lt;/template&gt;
+  </code></pre>
+
+  <h2>Key Takeaways</h2>
+
+  <ul>
+    <li>Use <code>@api</code> properties to receive data in child components</li>
+    <li>Use <code>template.querySelector()</code> to call child methods</li>
+    <li>Child events bubble up with <code>CustomEvent</code> and <code>dispatchEvent()</code></li>
+    <li>Data flows down via @api, events flow up</li>
+    <li>Always use kebab-case for @api property names in HTML</li>
+    <li>Validate @api properties in connectedCallback or getters</li>
+  </ul>
+
+</div>
+
+</body>
+</html>
