@@ -87,4 +87,19 @@
     <priority>0.8</priority>
   </url>
 
+  <!-- Apex Integration posts -->
+  <url>
+    <loc>https://salesforcegyan.com/posts/apex/integration/integration-patterns.html</loc>
+    <lastmod>2024-04-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://salesforcegyan.com/posts/apex/integration/soap-vs-rest.html</loc>
+    <lastmod>2024-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
 </urlset>

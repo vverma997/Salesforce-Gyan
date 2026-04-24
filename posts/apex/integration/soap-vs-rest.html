@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SOAP vs REST Integration in Salesforce - When to Use Each</title>
+  <meta name="description" content="Learn when to use SOAP vs REST APIs in Salesforce. Compare protocols, performance, security, and implementation complexity with real Apex code examples.">
+  <meta name="keywords" content="SOAP, REST, API integration, Salesforce, Apex callout, web services, integration patterns, HTTP requests">
+  <meta name="author" content="SalesforceG">
+  <meta name="robots" content="index, follow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="SOAP vs REST Integration in Salesforce - When to Use Each">
+  <meta property="og:description" content="Complete guide comparing SOAP and REST APIs in Salesforce. Learn when to use each protocol with code examples and best practices.">
+  <meta property="og:url" content="https://salesforcegyan.com/posts/apex/integration/soap-vs-rest.html">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="SOAP vs REST Integration in Salesforce">
+  <meta name="twitter:description" content="Complete guide to choosing between SOAP and REST APIs for Salesforce integrations.">
+
+  <link rel="canonical" href="https://salesforcegyan.com/posts/apex/integration/soap-vs-rest.html">
+
+  <!-- Structured Data for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "SOAP vs REST Integration in Salesforce - When to Use Each",
+    "description": "Complete guide comparing SOAP and REST APIs in Salesforce with implementation examples and best practices.",
+    "author": {
+      "@type": "Person",
+      "name": "SalesforceG"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "SalesforceG",
+      "url": "https://salesforcegyan.com"
+    },
+    "datePublished": "2024-04-20",
+    "dateModified": "2024-04-20",
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": "https://salesforcegyan.com/posts/apex/integration/soap-vs-rest.html"
+    },
+    "keywords": ["SOAP", "REST", "API", "Salesforce", "integration", "web services"]
+  }
+  </script>
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../css/post.css">
+  <script src="../../../js/main.js" defer></script>
+</head>
+
+<body>
+
+<nav>
+  <a href="../../../index.html">Home</a>
+  <a href="../../../blog.html">Blog</a>
+  <a href="../../../apex.html">Apex</a>
+</nav>
+
+<div class="article-container">
+
+  <h1>SOAP vs REST Integration – When to Use Each</h1>
+
+  <p>
+    Integrating external systems with Salesforce requires choosing between SOAP and REST APIs. This guide explains the differences and when to use each approach.
+  </p>
+
+  <h2>1. REST API Overview</h2>
+  <h3>Advantages</h3>
+  <ul>
+    <li>Lightweight and faster</li>
+    <li>Simpler to implement and test</li>
+    <li>Better for mobile and modern applications</li>
+    <li>Lower bandwidth usage</li>
+    <li>Stateless architecture</li>
+  </ul>
+
+  <h3>Example REST Callout</h3>
+  <pre><code>
+public class RESTCalloutExample {
+    public static void callExternalAPI() {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint('https://api.example.com/users');
+        request.setMethod('GET');
+        request.setHeader('Authorization', 'Bearer token');
+        request.setTimeout(120000);
+        
+        HttpResponse response = http.send(request);
+        if (response.getStatusCode() == 200) {
+            System.debug('Response: ' + response.getBody());
+        }
+    }
+}
+  </code></pre>
+
+  <h2>2. SOAP API Overview</h2>
+  <h3>Advantages</h3>
+  <ul>
+    <li>Strict XML-based protocol with strong contracts</li>
+    <li>Built-in security and reliability</li>
+    <li>Better for complex transactions</li>
+    <li>Ideal for legacy system integrations</li>
+    <li>WS-Security standards support</li>
+  </ul>
+
+  <h3>Example SOAP Callout</h3>
+  <pre><code>
+public class SOAPCalloutExample {
+    public static void callSOAPService() {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint('https://api.example.com/soap');
+        request.setMethod('POST');
+        request.setHeader('Content-Type', 'text/xml;charset=UTF-8');
+        request.setHeader('SOAPAction', 'http://example.com/action');
+        
+        String soapBody = '<?xml version="1.0" encoding="utf-8"?>'
+            + '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+            + '<soap:Body>'
+            + '<GetUser xmlns="http://example.com"><userId>123</userId></GetUser>'
+            + '</soap:Body>'
+            + '</soap:Envelope>';
+        
+        request.setBody(soapBody);
+        request.setTimeout(120000);
+        
+        HttpResponse response = http.send(request);
+        System.debug('SOAP Response: ' + response.getBody());
+    }
+}
+  </code></pre>
+
+  <h2>3. REST vs SOAP Comparison</h2>
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <tr style="background-color: #f5f5f5;">
+      <th style="border: 1px solid #ddd; padding: 10px;">Feature</th>
+      <th style="border: 1px solid #ddd; padding: 10px;">REST</th>
+      <th style="border: 1px solid #ddd; padding: 10px;">SOAP</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Protocol</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">HTTP Methods (GET, POST, PUT, DELETE)</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">XML-based, typically over HTTP</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Message Format</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">JSON (preferred), XML, Plain Text</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">XML (strict)</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Performance</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Faster, lightweight</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Slower, verbose</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Learning Curve</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Easy</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Steep</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Caching</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Built-in HTTP caching</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">Limited caching</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 10px;">Error Handling</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">HTTP Status Codes</td>
+      <td style="border: 1px solid #ddd; padding: 10px;">SOAP Faults in XML</td>
+    </tr>
+  </table>
+
+  <h2>4. When to Use REST</h2>
+  <ul>
+    <li>Building modern APIs and microservices</li>
+    <li>Mobile and web applications</li>
+    <li>Public APIs</li>
+    <li>Cloud-to-cloud integrations</li>
+    <li>Real-time data streaming</li>
+    <li>When bandwidth is a concern</li>
+  </ul>
+
+  <h2>5. When to Use SOAP</h2>
+  <ul>
+    <li>Legacy system integrations</li>
+    <li>Enterprise services requiring strict contracts</li>
+    <li>Complex transactions requiring guaranteed delivery</li>
+    <li>Systems with WSDL (Web Services Description Language)</li>
+    <li>Need for WS-Security and advanced security features</li>
+    <li>Highly regulated industries requiring audit trails</li>
+  </ul>
+
+  <h2>6. Best Practices</h2>
+  <h3>For REST Callouts:</h3>
+  <ul>
+    <li>Use Named Credentials for secure authentication</li>
+    <li>Implement proper error handling and retry logic</li>
+    <li>Parse JSON responses efficiently using JSONParser</li>
+    <li>Set appropriate timeouts (120 seconds max)</li>
+    <li>Monitor API rate limits</li>
+  </ul>
+
+  <h3>For SOAP Callouts:</h3>
+  <ul>
+    <li>Generate stubs from WSDL using Apex Web Services</li>
+    <li>Handle SOAP faults appropriately</li>
+    <li>Validate XML structure before sending</li>
+    <li>Consider using Apex-generated SOAP client classes</li>
+  </ul>
+
+  <h2>7. Decision Tree</h2>
+  <pre><code>
+Is it a modern API?
+├─ YES → Use REST
+└─ NO → Is it a legacy system?
+        ├─ YES → Check if it has SOAP/WSDL
+        │        ├─ YES → Use SOAP
+        │        └─ NO → Use REST
+        └─ NO → Use REST (modern approach)
+  </code></pre>
+
+</div>
+
+</body>
+</html>
